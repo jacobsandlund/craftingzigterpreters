@@ -1,5 +1,6 @@
 const std = @import("std");
 const Chunk = @import("chunk.zig");
+const debug = @import("debug.zig");
 
 const panic = std.debug.panic;
 
@@ -16,9 +17,6 @@ pub fn main() !void {
     var chunk = Chunk.init(allocator);
     defer chunk.deinit();
 
-    chunk.writeOpCode(Chunk.OpCode.OP_RETURN) catch |err| {
-        panic("Failed to write op code: {}", .{err});
-    };
-
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    try chunk.writeOpCode(Chunk.OpCode.OP_RETURN);
+    debug.dissassembleChunk(chunk, "test chunk");
 }

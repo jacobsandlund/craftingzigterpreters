@@ -8,6 +8,7 @@ const Allocator = std.mem.Allocator;
 pub const OpCode = enum(u8) {
     OP_CONSTANT,
     OP_RETURN,
+    _,
 };
 
 const Self = @This();

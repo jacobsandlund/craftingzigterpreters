@@ -68,8 +68,31 @@ pub fn interpret(self: *Self) InterpretResult {
         const instruction: OpCode = @enumFromInt(self.readByte());
         switch (instruction) {
             OpCode.OP_CONSTANT => {
-                const constant: Value = self.readConstant();
+                const constant = self.readConstant();
                 self.push(constant);
+            },
+            OpCode.OP_ADD => {
+                const b = self.pop();
+                const a = self.pop();
+                self.push(.{ .f64 = a.f64 + b.f64 });
+            },
+            OpCode.OP_SUBTRACT => {
+                const b = self.pop();
+                const a = self.pop();
+                self.push(.{ .f64 = a.f64 - b.f64 });
+            },
+            OpCode.OP_MULTIPLY => {
+                const b = self.pop();
+                const a = self.pop();
+                self.push(.{ .f64 = a.f64 * b.f64 });
+            },
+            OpCode.OP_DIVIDE => {
+                const b = self.pop();
+                const a = self.pop();
+                self.push(.{ .f64 = a.f64 / b.f64 });
+            },
+            OpCode.OP_NEGATE => {
+                self.push(.{ .f64 = -(self.pop().f64) });
             },
             OpCode.OP_RETURN => {
                 self.pop().print();

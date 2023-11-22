@@ -4,6 +4,7 @@ const debug = @import("debug.zig");
 const Vm = @import("vm.zig");
 
 const panic = std.debug.panic;
+const OpCode = Chunk.OpCode;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -19,11 +20,24 @@ pub fn main() !void {
     var chunk = Chunk.init(allocator);
     defer chunk.deinit();
 
-    const constant = try chunk.addConstant(.{ .f64 = 1.2 });
-    try chunk.writeOpCode(Chunk.OpCode.OP_CONSTANT, 123);
+    var constant = try chunk.addConstant(.{ .f64 = 1.2 });
+    try chunk.writeOpCode(OpCode.OP_CONSTANT, 123);
     try chunk.writeByte(constant, 123);
 
-    try chunk.writeOpCode(Chunk.OpCode.OP_RETURN, 123);
+    constant = try chunk.addConstant(.{ .f64 = 3.4 });
+    try chunk.writeOpCode(OpCode.OP_CONSTANT, 123);
+    try chunk.writeByte(constant, 123);
+
+    try chunk.writeOpCode(OpCode.OP_ADD, 123);
+
+    constant = try chunk.addConstant(.{ .f64 = 5.6 });
+    try chunk.writeOpCode(OpCode.OP_CONSTANT, 123);
+    try chunk.writeByte(constant, 123);
+
+    try chunk.writeOpCode(OpCode.OP_DIVIDE, 123);
+    try chunk.writeOpCode(OpCode.OP_NEGATE, 123);
+
+    try chunk.writeOpCode(OpCode.OP_RETURN, 123);
 
     debug.dissassembleChunk(&chunk, "test chunk");
 

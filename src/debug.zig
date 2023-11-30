@@ -1,66 +1,68 @@
 const std = @import("std");
 const Chunk = @import("chunk.zig");
 
+const Writer = std.io.Writer();
 const OpCode = Chunk.OpCode;
-const print = std.debug.print;
 
-pub fn dissassembleChunk(chunk: *Chunk, name: []const u8) void {
-    print("== {s} ==\n", .{name});
+pub fn dissassembleChunk(chunk: *Chunk, name: []const u8) !void {
+    const stderr = std.io.getStdErr();
+    const writer = stderr.writer();
+    try writer().print("== {s} ==\n", .{name});
 
     var offset: usize = 0;
 
     while (offset < chunk.code.items.len) {
-        offset = disassembleInstruction(chunk, offset);
+        offset = disassembleInstruction(writer, chunk, offset);
     }
 }
 
-pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
-    print("{d:0>4} ", .{offset});
+pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usize {
+    try writer.print("{d:0>4} ", .{offset});
     if (offset > 0 and chunk.lines.items[offset] == chunk.lines.items[offset - 1]) {
-        print("   | ", .{});
+        try writer.print("   | ", .{});
     } else {
-        print("{d:4} ", .{chunk.lines.items[offset]});
+        try writer.print("{d:4} ", .{chunk.lines.items[offset]});
     }
 
     const instruction: OpCode = @enumFromInt(chunk.code.items[offset]);
     switch (instruction) {
         OpCode.OP_CONSTANT => {
-            return constantInstruction("OP_CONSTANT", chunk, offset);
+            return try constantInstruction("OP_CONSTANT", chunk, offset);
         },
         OpCode.OP_ADD => {
-            return simpleInstruction("OP_ADD", offset);
+            return try simpleInstruction(writer, "OP_ADD", offset);
         },
         OpCode.OP_SUBTRACT => {
-            return simpleInstruction("OP_SUBTRACT", offset);
+            return try simpleInstruction(writer, "OP_SUBTRACT", offset);
         },
         OpCode.OP_MULTIPLY => {
-            return simpleInstruction("OP_MULTIPLY", offset);
+            return try simpleInstruction(writer, "OP_MULTIPLY", offset);
         },
         OpCode.OP_DIVIDE => {
-            return simpleInstruction("OP_DIVIDE", offset);
+            return try simpleInstruction(writer, "OP_DIVIDE", offset);
         },
         OpCode.OP_NEGATE => {
-            return simpleInstruction("OP_NEGATE", offset);
+            return try simpleInstruction(writer, "OP_NEGATE", offset);
         },
         OpCode.OP_RETURN => {
-            return simpleInstruction("OP_RETURN", offset);
+            return try simpleInstruction(writer, "OP_RETURN", offset);
         },
         _ => {
-            print("Unknown opcode {d:4}\n", .{instruction});
+            try writer.print("Unknown opcode {d:4}\n", .{instruction});
             return offset + 1;
         },
     }
 }
 
-fn simpleInstruction(name: []const u8, offset: usize) usize {
-    print("{s}\n", .{name});
+fn simpleInstruction(writer: Writer, name: []const u8, offset: usize) !usize {
+    try writer.print("{s}\n", .{name});
     return offset + 1;
 }
 
-fn constantInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
+fn constantInstruction(writer: Writer, name: []const u8, chunk: *Chunk, offset: usize) !usize {
     const constant = chunk.code.items[offset + 1];
-    print("{s:<16} {d:4} '", .{ name, constant });
+    try writer.print("{s:<16} {d:4} '", .{ name, constant });
     chunk.constants.values.items[constant].print();
-    print("'\n", .{});
+    try writer.print("'\n", .{});
     return offset + 2;
 }

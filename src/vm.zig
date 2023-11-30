@@ -3,29 +3,26 @@ const Chunk = @import("chunk.zig");
 const Value = @import("value.zig").Value;
 const DEBUG_TRACE_EXECUTION = @import("common.zig").DEBUG_TRACE_EXECUTION;
 const disassembleInstruction = @import("debug.zig").disassembleInstruction;
+const compile = @import("compiler.zig").compile;
 
 const OpCode = Chunk.OpCode;
-const print = std.debug.print;
 
 const STACK_MAX = 256;
 
-chunk: *Chunk,
 ip: [*]u8,
 stack: [STACK_MAX]Value,
 stackTop: [*]Value,
 
 const Self = @This();
 
-pub const InterpretResult = enum {
-    INTERPRET_OK,
-    INTERPRET_COMPILE_ERROR,
-    INTERPRET_RUNTIME_ERROR,
-};
+pub const InterpretError = error{
+    CompileError,
+    RuntimeError,
+} || std.fs.File.WriteError;
 
-pub fn init(chunk: *Chunk) Self {
+pub fn init() Self {
     return Self{
-        .chunk = chunk,
-        .ip = chunk.code.items.ptr,
+        .ip = undefined,
         .stack = undefined,
         .stackTop = undefined,
     };
@@ -47,28 +44,39 @@ pub fn pop(self: *Self) Value {
     return self.stackTop[0];
 }
 
-pub fn interpret(self: *Self) InterpretResult {
+pub fn interpret(self: *Self, source: []const u8) InterpretError!void {
+    _ = self;
+    compile(source);
+}
+
+pub fn run(self: *Self, chunk: *Chunk) InterpretError!void {
+    const stdout = std.io.getStdOut();
+    const stderr = std.io.getStdErr();
+    const writer = stdout.writer();
+    const errWriter = stderr.writer();
+
+    self.ip = chunk.code.items.ptr;
     self.resetStack();
 
     while (true) {
         if (DEBUG_TRACE_EXECUTION) {
-            print("          ", .{});
+            try errWriter.print("          ", .{});
             var slot: [*]Value = @ptrCast(&self.stack);
             while (slot != self.stackTop) {
-                print("[ ", .{});
-                slot[0].print();
-                print(" ]", .{});
+                try errWriter.print("[ ", .{});
+                slot[0].print(errWriter);
+                try errWriter.print(" ]", .{});
                 slot += 1;
             }
-            print("\n", .{});
+            try errWriter.print("\n", .{});
 
-            _ = disassembleInstruction(self.chunk, @intFromPtr(self.ip) - @intFromPtr(self.chunk.code.items.ptr));
+            _ = disassembleInstruction(errWriter, chunk, @intFromPtr(self.ip) - @intFromPtr(chunk.code.items.ptr));
         }
 
         const instruction: OpCode = @enumFromInt(self.readByte());
         switch (instruction) {
             OpCode.OP_CONSTANT => {
-                const constant = self.readConstant();
+                const constant = self.readConstant(chunk);
                 self.push(constant);
             },
             OpCode.OP_ADD => {
@@ -95,13 +103,13 @@ pub fn interpret(self: *Self) InterpretResult {
                 self.push(.{ .f64 = -(self.pop().f64) });
             },
             OpCode.OP_RETURN => {
-                self.pop().print();
-                print("\n", .{});
-                return InterpretResult.INTERPRET_OK;
+                try self.pop().print(writer);
+                try writer.print("\n", .{});
+                return;
             },
             _ => {
-                print("Unknown opcode {d:4}\n", .{instruction});
-                return InterpretResult.INTERPRET_RUNTIME_ERROR;
+                try errWriter.print("Unknown opcode {d:4}\n", .{instruction});
+                return InterpretError.RuntimeError;
             },
         }
     }
@@ -113,6 +121,6 @@ inline fn readByte(self: *Self) u8 {
     return byte;
 }
 
-fn readConstant(self: *Self) Value {
-    return self.chunk.constants.values.items[self.readByte()];
+fn readConstant(self: *Self, chunk: *Chunk) Value {
+    return chunk.constants.values.items[self.readByte()];
 }

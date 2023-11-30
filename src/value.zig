@@ -7,8 +7,8 @@ pub const Value = union {
 
     const Self = @This();
 
-    pub fn print(self: Self) void {
-        std.debug.print("{e}", .{self.f64});
+    pub fn print(self: Self, writer: std.io.Writer) !void {
+        try writer.print("{e}", .{self.f64});
     }
 };
 

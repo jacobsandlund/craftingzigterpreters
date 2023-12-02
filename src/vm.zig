@@ -9,7 +9,9 @@ const OpCode = Chunk.OpCode;
 
 const STACK_MAX = 256;
 
+allocator: std.mem.Allocator,
 ip: [*]u8,
+chunk: *Chunk,
 stack: [STACK_MAX]Value,
 stackTop: [*]Value,
 
@@ -20,8 +22,10 @@ pub const InterpretError = error{
     RuntimeError,
 } || std.fs.File.WriteError;
 
-pub fn init() Self {
+pub fn init(allocator: std.mem.Allocator) Self {
     return Self{
+        .allocator = allocator,
+        .chunk = undefined,
         .ip = undefined,
         .stack = undefined,
         .stackTop = undefined,
@@ -45,17 +49,35 @@ pub fn pop(self: *Self) Value {
 }
 
 pub fn interpret(self: *Self, source: []const u8) InterpretError!void {
-    _ = self;
-    compile(source);
+    const stderr = std.io.getStdErr();
+    const errWriter = stderr.writer();
+
+    var chunk = Chunk.init(self.allocator);
+    defer chunk.deinit();
+
+    const success = compile(source, &chunk) catch |err| {
+        try errWriter.print("Got error when trying to compile: {}\n", .{err});
+
+        return InterpretError.CompileError;
+    };
+
+    if (!success) {
+        return InterpretError.CompileError;
+    }
+
+    self.chunk = &chunk;
+    self.ip = chunk.code.items.ptr;
+
+    return self.run();
 }
 
-pub fn run(self: *Self, chunk: *Chunk) InterpretError!void {
+pub fn run(self: *Self) InterpretError!void {
     const stdout = std.io.getStdOut();
     const stderr = std.io.getStdErr();
     const writer = stdout.writer();
     const errWriter = stderr.writer();
+    var chunk = self.chunk;
 
-    self.ip = chunk.code.items.ptr;
     self.resetStack();
 
     while (true) {
@@ -64,13 +86,13 @@ pub fn run(self: *Self, chunk: *Chunk) InterpretError!void {
             var slot: [*]Value = @ptrCast(&self.stack);
             while (slot != self.stackTop) {
                 try errWriter.print("[ ", .{});
-                slot[0].print(errWriter);
+                try slot[0].print(errWriter);
                 try errWriter.print(" ]", .{});
                 slot += 1;
             }
             try errWriter.print("\n", .{});
 
-            _ = disassembleInstruction(errWriter, chunk, @intFromPtr(self.ip) - @intFromPtr(chunk.code.items.ptr));
+            _ = try disassembleInstruction(errWriter, chunk, @intFromPtr(self.ip) - @intFromPtr(chunk.code.items.ptr));
         }
 
         const instruction: OpCode = @enumFromInt(self.readByte());

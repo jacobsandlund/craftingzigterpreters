@@ -5,12 +5,12 @@ const Self = @This();
 start: [*]u8,
 current: [*]u8,
 sourceEnd: [*]u8,
-line: isize,
+line: u32,
 
 pub const Token = struct {
     type: Type,
     slice: []const u8,
-    line: isize,
+    line: u32,
 
     pub const Type = enum {
         // Single-character tokens.

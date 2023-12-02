@@ -1,10 +1,8 @@
 const std = @import("std");
-const Chunk = @import("chunk.zig");
 const debug = @import("debug.zig");
 const Vm = @import("vm.zig");
 
 const panic = std.debug.panic;
-const OpCode = Chunk.OpCode;
 
 pub fn main() !void {
     const stderr = std.io.getStdErr();
@@ -39,7 +37,7 @@ pub fn main() !void {
         std.process.exit(64);
     }
 
-    var vm = Vm.init();
+    var vm = Vm.init(allocator);
     defer vm.deinit();
 
     if (hasPath) {

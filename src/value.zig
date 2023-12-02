@@ -7,7 +7,7 @@ pub const Value = union {
 
     const Self = @This();
 
-    pub fn print(self: Self, writer: std.io.Writer) !void {
+    pub fn print(self: Self, writer: std.fs.File.Writer) !void {
         try writer.print("{e}", .{self.f64});
     }
 };

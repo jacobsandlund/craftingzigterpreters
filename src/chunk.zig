@@ -45,12 +45,7 @@ pub fn writeByte(self: *Self, byte: u8, line: u32) Allocator.Error!void {
     try self.lines.append(line);
 }
 
-pub fn addConstant(self: *Self, value: Value) Allocator.Error!u8 {
+pub fn addConstant(self: *Self, value: Value) Allocator.Error!usize {
     try self.constants.write(value);
-    const len = self.constants.values.items.len;
-    if (len <= 256) {
-        return @truncate(len - 1);
-    } else {
-        @panic("Too many constants!");
-    }
+    return self.constants.values.items.len - 1;
 }

@@ -1,13 +1,13 @@
 const std = @import("std");
 const Chunk = @import("chunk.zig");
 
-const Writer = std.io.Writer();
+const Writer = std.fs.File.Writer;
 const OpCode = Chunk.OpCode;
 
 pub fn dissassembleChunk(chunk: *Chunk, name: []const u8) !void {
     const stderr = std.io.getStdErr();
     const writer = stderr.writer();
-    try writer().print("== {s} ==\n", .{name});
+    try writer.print("== {s} ==\n", .{name});
 
     var offset: usize = 0;
 
@@ -27,7 +27,7 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
     const instruction: OpCode = @enumFromInt(chunk.code.items[offset]);
     switch (instruction) {
         OpCode.OP_CONSTANT => {
-            return try constantInstruction("OP_CONSTANT", chunk, offset);
+            return try constantInstruction(writer, "OP_CONSTANT", chunk, offset);
         },
         OpCode.OP_ADD => {
             return try simpleInstruction(writer, "OP_ADD", offset);
@@ -62,7 +62,7 @@ fn simpleInstruction(writer: Writer, name: []const u8, offset: usize) !usize {
 fn constantInstruction(writer: Writer, name: []const u8, chunk: *Chunk, offset: usize) !usize {
     const constant = chunk.code.items[offset + 1];
     try writer.print("{s:<16} {d:4} '", .{ name, constant });
-    chunk.constants.values.items[constant].print();
+    try chunk.constants.values.items[constant].print(writer);
     try writer.print("'\n", .{});
     return offset + 2;
 }

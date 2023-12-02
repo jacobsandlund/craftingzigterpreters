@@ -63,15 +63,28 @@ fn repl(vm: *Vm) !void {
             vm.interpret(input) catch |err| {
                 try errWriter.print("Got InterpretError: {!}", .{err});
             };
+        } else {
+            return;
         }
     }
 }
 
 fn nextLine(reader: std.io.AnyReader, buffer: []u8) !?[]const u8 {
-    var line = (try reader.readUntilDelimiterOrEof(
-        buffer,
+    var fbs = std.io.fixedBufferStream(buffer);
+    reader.streamUntilDelimiter(
+        fbs.writer(),
         '\n',
-    )) orelse return null;
+        buffer.len,
+    ) catch |err| switch (err) {
+        error.EndOfStream => if (fbs.getWritten().len == 0) {
+            return null;
+        },
+
+        else => |e| return e,
+    };
+
+    var line = fbs.getWritten();
+
     // trim annoying windows-only carriage return character
     if (@import("builtin").os.tag == .windows) {
         return std.mem.trimRight(u8, line, "\r");

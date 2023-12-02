@@ -12,7 +12,7 @@ pub fn dissassembleChunk(chunk: *Chunk, name: []const u8) !void {
     var offset: usize = 0;
 
     while (offset < chunk.code.items.len) {
-        offset = disassembleInstruction(writer, chunk, offset);
+        offset = try disassembleInstruction(writer, chunk, offset);
     }
 }
 

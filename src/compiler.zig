@@ -1,6 +1,8 @@
 const std = @import("std");
 const Chunk = @import("chunk.zig");
 const Value = @import("value.zig").Value;
+const DEBUG_PRINT_CODE = @import("common.zig").DEBUG_PRINT_CODE;
+const dissassembleChunk = @import("debug.zig").dissassembleChunk;
 
 const Scanner = @import("scanner.zig");
 
@@ -195,8 +197,13 @@ fn makeConstant(value: Value) u8 {
     return @truncate(constant);
 }
 
-fn endCompiler() ParseError!void {
+fn endCompiler() !void {
     try emitReturn();
+    if (DEBUG_PRINT_CODE) {
+        if (!parser.hadError) {
+            _ = try dissassembleChunk(currentChunk(), "code");
+        }
+    }
 }
 
 fn parsePrecedence(precedence: Precedence) ParseError!void {

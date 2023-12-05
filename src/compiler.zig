@@ -61,31 +61,31 @@ const rules = blk: {
     r.set(Token.Type.TOKEN_SEMICOLON, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_SLASH, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_FACTOR });
     r.set(Token.Type.TOKEN_STAR, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_FACTOR });
-    r.set(Token.Type.TOKEN_BANG, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_BANG_EQUAL, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(Token.Type.TOKEN_BANG, .{ .prefix = unary, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(Token.Type.TOKEN_BANG_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_EQUALITY });
     r.set(Token.Type.TOKEN_EQUAL, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_EQUAL_EQUAL, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_GREATER, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_GREATER_EQUAL, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_LESS, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_LESS_EQUAL, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(Token.Type.TOKEN_EQUAL_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_EQUALITY });
+    r.set(Token.Type.TOKEN_GREATER, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
+    r.set(Token.Type.TOKEN_GREATER_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
+    r.set(Token.Type.TOKEN_LESS, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
+    r.set(Token.Type.TOKEN_LESS_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
     r.set(Token.Type.TOKEN_IDENTIFIER, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_STRING, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_NUMBER, .{ .prefix = number, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_AND, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_CLASS, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_ELSE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_FALSE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(Token.Type.TOKEN_FALSE, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_FOR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_FUN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_IF, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_NIL, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(Token.Type.TOKEN_NIL, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_OR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_PRINT, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_RETURN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_SUPER, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_THIS, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_TRUE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(Token.Type.TOKEN_TRUE, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_VAR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_WHILE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_ERROR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
@@ -167,8 +167,8 @@ fn emitByte(byte: u8) ParseError!void {
     try currentChunk().writeByte(byte, parser.previous.line);
 }
 
-fn emitBytes(opCode: OpCode, byte2: u8) ParseError!void {
-    try emitOpCode(opCode);
+fn emitBytes(byte1: u8, byte2: u8) ParseError!void {
+    try emitByte(byte1);
     try emitByte(byte2);
 }
 
@@ -176,12 +176,17 @@ fn emitOpCode(opCode: OpCode) ParseError!void {
     try currentChunk().writeOpCode(opCode, parser.previous.line);
 }
 
+fn emitOpCodeWithByte(opCode: OpCode, byte: u8) ParseError!void {
+    try emitOpCode(opCode);
+    try emitByte(byte);
+}
+
 fn emitReturn() ParseError!void {
     try emitOpCode(OpCode.OP_RETURN);
 }
 
 fn emitConstant(value: Value) ParseError!void {
-    try emitBytes(OpCode.OP_CONSTANT, makeConstant(value));
+    try emitOpCodeWithByte(OpCode.OP_CONSTANT, makeConstant(value));
 }
 
 fn makeConstant(value: Value) u8 {
@@ -240,6 +245,9 @@ fn unary() ParseError!void {
 
     // Emit the operator instruction.
     switch (operatorType) {
+        Token.Type.TOKEN_BANG => {
+            try emitOpCode(OpCode.OP_NOT);
+        },
         Token.Type.TOKEN_MINUS => {
             try emitOpCode(OpCode.OP_NEGATE);
         },
@@ -255,6 +263,24 @@ fn binary() ParseError!void {
     try parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1));
 
     switch (operatorType) {
+        Token.Type.TOKEN_BANG_EQUAL => {
+            try emitBytes(@intFromEnum(OpCode.OP_ADD), @intFromEnum(OpCode.OP_NOT));
+        },
+        Token.Type.TOKEN_EQUAL_EQUAL => {
+            try emitOpCode(OpCode.OP_EQUAL);
+        },
+        Token.Type.TOKEN_GREATER => {
+            try emitOpCode(OpCode.OP_GREATER);
+        },
+        Token.Type.TOKEN_GREATER_EQUAL => {
+            try emitBytes(@intFromEnum(OpCode.OP_LESS), @intFromEnum(OpCode.OP_NOT));
+        },
+        Token.Type.TOKEN_LESS => {
+            try emitOpCode(OpCode.OP_LESS);
+        },
+        Token.Type.TOKEN_LESS_EQUAL => {
+            try emitBytes(@intFromEnum(OpCode.OP_GREATER), @intFromEnum(OpCode.OP_NOT));
+        },
         Token.Type.TOKEN_PLUS => {
             try emitOpCode(OpCode.OP_ADD);
         },
@@ -273,10 +299,27 @@ fn binary() ParseError!void {
     }
 }
 
+fn literal() ParseError!void {
+    switch (parser.previous.type) {
+        Token.Type.TOKEN_FALSE => {
+            try emitOpCode(OpCode.OP_FALSE);
+        },
+        Token.Type.TOKEN_NIL => {
+            try emitOpCode(OpCode.OP_NIL);
+        },
+        Token.Type.TOKEN_TRUE => {
+            try emitOpCode(OpCode.OP_TRUE);
+        },
+        else => {
+            unreachable;
+        },
+    }
+}
+
 fn number() ParseError!void {
     const value: f64 = std.fmt.parseFloat(f64, parser.previous.slice) catch {
         error_("Could not parse float.");
         return;
     };
-    try emitConstant(Value{ .f64 = value });
+    try emitConstant(Value{ .number = value });
 }

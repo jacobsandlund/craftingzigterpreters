@@ -29,6 +29,24 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         OpCode.OP_CONSTANT => {
             return try constantInstruction(writer, "OP_CONSTANT", chunk, offset);
         },
+        OpCode.OP_NIL => {
+            return try simpleInstruction(writer, "OP_NIL", offset);
+        },
+        OpCode.OP_TRUE => {
+            return try simpleInstruction(writer, "OP_TRUE", offset);
+        },
+        OpCode.OP_FALSE => {
+            return try simpleInstruction(writer, "OP_FALSE", offset);
+        },
+        OpCode.OP_EQUAL => {
+            return try simpleInstruction(writer, "OP_EQUAL", offset);
+        },
+        OpCode.OP_GREATER => {
+            return try simpleInstruction(writer, "OP_GREATER", offset);
+        },
+        OpCode.OP_LESS => {
+            return try simpleInstruction(writer, "OP_LESS", offset);
+        },
         OpCode.OP_ADD => {
             return try simpleInstruction(writer, "OP_ADD", offset);
         },
@@ -40,6 +58,9 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         },
         OpCode.OP_DIVIDE => {
             return try simpleInstruction(writer, "OP_DIVIDE", offset);
+        },
+        OpCode.OP_NOT => {
+            return try simpleInstruction(writer, "OP_NOT", offset);
         },
         OpCode.OP_NEGATE => {
             return try simpleInstruction(writer, "OP_NEGATE", offset);

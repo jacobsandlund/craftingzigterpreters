@@ -38,14 +38,34 @@ fn resetStack(self: *Self) void {
     self.stackTop = @ptrCast(&self.stack);
 }
 
-pub fn push(self: *Self, value: Value) void {
+fn runtimeError(self: *Self, comptime fmt: []const u8, args: anytype) !void {
+    const stderr = std.io.getStdErr();
+    const errWriter = stderr.writer();
+
+    try errWriter.print(fmt, args);
+
+    const instruction = @intFromPtr(self.ip) - @intFromPtr(self.chunk.code.items.ptr) - 1;
+    const line = self.chunk.lines.items[instruction];
+    try errWriter.print("[line {d}] in script\n", .{line});
+    self.resetStack();
+}
+
+fn push(self: *Self, value: Value) void {
     self.stackTop[0] = value;
     self.stackTop += 1;
 }
 
-pub fn pop(self: *Self) Value {
+fn pop(self: *Self) Value {
     self.stackTop -= 1;
     return self.stackTop[0];
+}
+
+fn peek(self: Self, distance: usize) Value {
+    return (self.stackTop - 1 - distance)[0];
+}
+
+fn isFalsey(value: Value) bool {
+    return value == Value.nil or (value == Value.boolean and !value.boolean);
 }
 
 pub fn interpret(self: *Self, source: []const u8) InterpretError!void {
@@ -101,28 +121,83 @@ pub fn run(self: *Self) InterpretError!void {
                 const constant = self.readConstant(chunk);
                 self.push(constant);
             },
-            OpCode.OP_ADD => {
+            OpCode.OP_NIL => {
+                self.push(Value.nil);
+            },
+            OpCode.OP_TRUE => {
+                self.push(Value{ .boolean = true });
+            },
+            OpCode.OP_FALSE => {
+                self.push(Value{ .boolean = false });
+            },
+            OpCode.OP_EQUAL => {
                 const b = self.pop();
                 const a = self.pop();
-                self.push(.{ .f64 = a.f64 + b.f64 });
+                self.push(.{ .boolean = Value.equal(a, b) });
+            },
+            OpCode.OP_GREATER => {
+                if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
+                    try self.runtimeError("Operands must be numbers.", .{});
+                    return InterpretError.RuntimeError;
+                }
+                const b = self.pop().number;
+                const a = self.pop().number;
+                self.push(.{ .boolean = a > b });
+            },
+            OpCode.OP_LESS => {
+                if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
+                    try self.runtimeError("Operands must be numbers.", .{});
+                    return InterpretError.RuntimeError;
+                }
+                const b = self.pop().number;
+                const a = self.pop().number;
+                self.push(.{ .boolean = a < b });
+            },
+            OpCode.OP_ADD => {
+                if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
+                    try self.runtimeError("Operands must be numbers.", .{});
+                    return InterpretError.RuntimeError;
+                }
+                const b = self.pop().number;
+                const a = self.pop().number;
+                self.push(.{ .number = a + b });
             },
             OpCode.OP_SUBTRACT => {
-                const b = self.pop();
-                const a = self.pop();
-                self.push(.{ .f64 = a.f64 - b.f64 });
+                if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
+                    try self.runtimeError("Operands must be numbers.", .{});
+                    return InterpretError.RuntimeError;
+                }
+                const b = self.pop().number;
+                const a = self.pop().number;
+                self.push(.{ .number = a - b });
             },
             OpCode.OP_MULTIPLY => {
-                const b = self.pop();
-                const a = self.pop();
-                self.push(.{ .f64 = a.f64 * b.f64 });
+                if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
+                    try self.runtimeError("Operands must be numbers.", .{});
+                    return InterpretError.RuntimeError;
+                }
+                const b = self.pop().number;
+                const a = self.pop().number;
+                self.push(.{ .number = a * b });
             },
             OpCode.OP_DIVIDE => {
-                const b = self.pop();
-                const a = self.pop();
-                self.push(.{ .f64 = a.f64 / b.f64 });
+                if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
+                    try self.runtimeError("Operands must be numbers.", .{});
+                    return InterpretError.RuntimeError;
+                }
+                const b = self.pop().number;
+                const a = self.pop().number;
+                self.push(.{ .number = a / b });
+            },
+            OpCode.OP_NOT => {
+                self.push(.{ .boolean = isFalsey(self.pop()) });
             },
             OpCode.OP_NEGATE => {
-                self.push(.{ .f64 = -(self.pop().f64) });
+                if (self.peek(0) != Value.number) {
+                    try self.runtimeError("Operand must be a number.", .{});
+                    return InterpretError.RuntimeError;
+                }
+                self.push(.{ .number = -(self.pop().number) });
             },
             OpCode.OP_RETURN => {
                 try self.pop().print(writer);

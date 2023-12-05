@@ -2,13 +2,39 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
-pub const Value = union {
-    f64: f64,
+pub const Value = union(Type) {
+    number: f64,
+    boolean: bool,
+    nil,
 
     const Self = @This();
 
+    pub const Type = enum {
+        number,
+        boolean,
+        nil,
+    };
+
     pub fn print(self: Self, writer: std.fs.File.Writer) !void {
-        try writer.print("{e}", .{self.f64});
+        switch (self) {
+            .number => |number| try writer.print("{e}", .{number}),
+            .boolean => |boolean| try writer.print("{s}", .{if (boolean) "true" else "false"}),
+            .nil => try writer.print("nil", .{}),
+        }
+    }
+
+    pub fn equal(a: Self, b: Self) bool {
+        if (@as(Type, a) != @as(Type, b)) {
+            return false;
+        }
+
+        switch (a) {
+            .boolean => return a.boolean == b.boolean,
+            .nil => return true,
+            .number => return a.number == b.number,
+        }
+
+        return true;
     }
 };
 

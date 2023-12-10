@@ -1,10 +1,12 @@
 const std = @import("std");
+const Obj = @import("object.zig").Obj;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
 pub const Value = union(Type) {
     number: f64,
     boolean: bool,
+    obj: *Obj,
     nil,
 
     const Self = @This();
@@ -12,6 +14,7 @@ pub const Value = union(Type) {
     pub const Type = enum {
         number,
         boolean,
+        obj,
         nil,
     };
 
@@ -20,6 +23,7 @@ pub const Value = union(Type) {
             .number => |number| try writer.print("{e}", .{number}),
             .boolean => |boolean| try writer.print("{s}", .{if (boolean) "true" else "false"}),
             .nil => try writer.print("nil", .{}),
+            .obj => |obj| try obj.printObject(writer),
         }
     }
 
@@ -32,9 +36,14 @@ pub const Value = union(Type) {
             .boolean => return a.boolean == b.boolean,
             .nil => return true,
             .number => return a.number == b.number,
+            .obj => return Obj.equal(a.obj, b.obj),
         }
 
         return true;
+    }
+
+    pub fn isObjType(self: Self, objType: Obj.Type) bool {
+        return self == Self.obj and self.obj.type == objType;
     }
 };
 

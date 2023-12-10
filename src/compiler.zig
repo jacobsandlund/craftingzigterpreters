@@ -3,6 +3,8 @@ const Chunk = @import("chunk.zig");
 const Value = @import("value.zig").Value;
 const DEBUG_PRINT_CODE = @import("common.zig").DEBUG_PRINT_CODE;
 const dissassembleChunk = @import("debug.zig").dissassembleChunk;
+const ObjString = @import("object.zig").ObjString;
+const GcAllocator = @import("GcAllocator.zig");
 
 const Scanner = @import("scanner.zig");
 
@@ -10,7 +12,6 @@ const Token = Scanner.Token;
 const print = std.debug.print;
 const OpCode = Chunk.OpCode;
 const panic = std.debug.panic;
-const Allocator = std.mem.Allocator;
 
 const Parser = struct {
     current: Token,
@@ -33,7 +34,7 @@ const Precedence = enum {
     PREC_PRIMARY,
 };
 
-const ParseError = Allocator.Error;
+const ParseError = std.mem.Allocator.Error;
 
 const ParseFn = *const fn () ParseError!void;
 
@@ -46,6 +47,7 @@ const ParseRule = struct {
 var parser: Parser = undefined;
 var scanner: Scanner = undefined;
 var compilingChunk: *Chunk = undefined;
+var allocator: *GcAllocator = undefined;
 
 const rules = blk: {
     var r: std.EnumArray(Token.Type, ParseRule) = undefined;
@@ -70,7 +72,7 @@ const rules = blk: {
     r.set(Token.Type.TOKEN_LESS, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
     r.set(Token.Type.TOKEN_LESS_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
     r.set(Token.Type.TOKEN_IDENTIFIER, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_STRING, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(Token.Type.TOKEN_STRING, .{ .prefix = string, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_NUMBER, .{ .prefix = number, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_AND, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_CLASS, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
@@ -94,9 +96,10 @@ const rules = blk: {
     break :blk r;
 };
 
-pub fn compile(source: []const u8, chunk: *Chunk) !bool {
+pub fn compile(allocator_: *GcAllocator, source: []const u8, chunk: *Chunk) !bool {
     scanner = Scanner.init(source);
     compilingChunk = chunk;
+    allocator = allocator_;
 
     parser.hadError = false;
     parser.panicMode = false;
@@ -322,4 +325,10 @@ fn number() ParseError!void {
         return;
     };
     try emitConstant(Value{ .number = value });
+}
+
+fn string() ParseError!void {
+    const stringObj = try allocator.createString(parser.previous.slice.len - 2);
+    stringObj.appendSliceAssumeCapacity(parser.previous.slice[1 .. parser.previous.slice.len - 1]);
+    try emitConstant(Value{ .obj = &stringObj.obj });
 }

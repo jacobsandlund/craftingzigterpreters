@@ -327,8 +327,8 @@ fn string(self: *Self) Token {
     while (!self.isAtEnd() and self.peek() != '"') {
         if (self.peek() == '\n') {
             self.line += 1;
-            _ = self.advance();
         }
+        _ = self.advance();
     }
 
     if (self.isAtEnd()) return self.errorToken("Unterminated string.");

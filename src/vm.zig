@@ -4,12 +4,15 @@ const Value = @import("value.zig").Value;
 const DEBUG_TRACE_EXECUTION = @import("common.zig").DEBUG_TRACE_EXECUTION;
 const disassembleInstruction = @import("debug.zig").disassembleInstruction;
 const compile = @import("compiler.zig").compile;
+const Obj = @import("object.zig").Obj;
+const ObjString = @import("object.zig").ObjString;
+const GcAllocator = @import("GcAllocator.zig");
 
 const OpCode = Chunk.OpCode;
 
 const STACK_MAX = 256;
 
-allocator: std.mem.Allocator,
+allocator: GcAllocator,
 ip: [*]u8,
 chunk: *Chunk,
 stack: [STACK_MAX]Value,
@@ -20,11 +23,11 @@ const Self = @This();
 pub const InterpretError = error{
     CompileError,
     RuntimeError,
-} || std.fs.File.WriteError;
+} || std.fs.File.WriteError || std.mem.Allocator.Error;
 
 pub fn init(allocator: std.mem.Allocator) Self {
     return Self{
-        .allocator = allocator,
+        .allocator = GcAllocator.init(allocator),
         .chunk = undefined,
         .ip = undefined,
         .stack = undefined,
@@ -32,7 +35,9 @@ pub fn init(allocator: std.mem.Allocator) Self {
     };
 }
 
-pub fn deinit(_: Self) void {}
+pub fn deinit(self: *Self) void {
+    self.allocator.deinit();
+}
 
 fn resetStack(self: *Self) void {
     self.stackTop = @ptrCast(&self.stack);
@@ -72,10 +77,10 @@ pub fn interpret(self: *Self, source: []const u8) InterpretError!void {
     const stderr = std.io.getStdErr();
     const errWriter = stderr.writer();
 
-    var chunk = Chunk.init(self.allocator);
+    var chunk = Chunk.init(self.allocator.allocator());
     defer chunk.deinit();
 
-    const success = compile(source, &chunk) catch |err| {
+    const success = compile(&self.allocator, source, &chunk) catch |err| {
         try errWriter.print("Got error when trying to compile: {}\n", .{err});
 
         return InterpretError.CompileError;
@@ -154,13 +159,16 @@ pub fn run(self: *Self) InterpretError!void {
                 self.push(.{ .boolean = a < b });
             },
             OpCode.OP_ADD => {
-                if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
-                    try self.runtimeError("Operands must be numbers.", .{});
+                if (self.peek(0).isObjType(Obj.Type.OBJ_STRING) and self.peek(1).isObjType(Obj.Type.OBJ_STRING)) {
+                    try self.concatenate();
+                } else if (self.peek(0) == Value.number and self.peek(1) == Value.number) {
+                    const b = self.pop().number;
+                    const a = self.pop().number;
+                    self.push(.{ .number = a + b });
+                } else {
+                    try self.runtimeError("Operands must be two numbers or two strings.", .{});
                     return InterpretError.RuntimeError;
                 }
-                const b = self.pop().number;
-                const a = self.pop().number;
-                self.push(.{ .number = a + b });
             },
             OpCode.OP_SUBTRACT => {
                 if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
@@ -220,4 +228,15 @@ inline fn readByte(self: *Self) u8 {
 
 fn readConstant(self: *Self, chunk: *Chunk) Value {
     return chunk.constants.values.items[self.readByte()];
+}
+
+fn concatenate(self: *Self) !void {
+    const bString = self.pop().obj.string().string;
+    const aString = self.pop().obj.string().string;
+
+    const result = try self.allocator.createString(bString.items.len + aString.items.len);
+    result.appendSliceAssumeCapacity(aString.items);
+    result.appendSliceAssumeCapacity(bString.items);
+
+    self.push(Value{ .obj = &result.obj });
 }

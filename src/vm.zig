@@ -234,9 +234,10 @@ fn concatenate(self: *Self) !void {
     const bString = self.pop().obj.string().string;
     const aString = self.pop().obj.string().string;
 
-    const result = try self.allocator.createString(bString.items.len + aString.items.len);
-    result.appendSliceAssumeCapacity(aString.items);
-    result.appendSliceAssumeCapacity(bString.items);
+    var resultSlice = try self.allocator.allocator().alloc(u8, aString.len + bString.len);
+    @memcpy(resultSlice[0..aString.len], aString);
+    @memcpy(resultSlice[aString.len..], bString);
 
+    const result = try ObjString.takeString(&self.allocator, resultSlice);
     self.push(Value{ .obj = &result.obj });
 }

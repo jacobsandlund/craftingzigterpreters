@@ -328,7 +328,6 @@ fn number() ParseError!void {
 }
 
 fn string() ParseError!void {
-    const stringObj = try allocator.createString(parser.previous.slice.len - 2);
-    stringObj.appendSliceAssumeCapacity(parser.previous.slice[1 .. parser.previous.slice.len - 1]);
+    const stringObj = try ObjString.copyString(allocator, parser.previous.slice[1 .. parser.previous.slice.len - 1]);
     try emitConstant(Value{ .obj = &stringObj.obj });
 }

@@ -1,4 +1,5 @@
 const std = @import("std");
+const GcAllocator = @import("GcAllocator.zig");
 
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
@@ -25,14 +26,14 @@ pub const Obj = struct {
         // TODO: don't assume string
         const aString = a.string().string;
         const bString = b.string().string;
-        return std.mem.eql(u8, aString.items, bString.items);
+        return std.mem.eql(u8, aString, bString);
     }
 
     pub fn destroyWithAllocator(self: *Obj, allocator: Allocator) void {
         switch (self.type) {
             .OBJ_STRING => {
                 const s = self.string();
-                s.deinit();
+                s.deinitWithAllocator(allocator);
                 allocator.destroy(s);
             },
         }
@@ -41,26 +42,28 @@ pub const Obj = struct {
 
 pub const ObjString = struct {
     obj: Obj,
-    string: ArrayList(u8),
+    string: []const u8,
 
-    pub fn initCapacity(allocator: Allocator, num: usize) !ObjString {
-        return ObjString{
-            .obj = Obj{
-                .type = Obj.Type.OBJ_STRING,
-            },
-            .string = try ArrayList(u8).initCapacity(allocator, num),
-        };
+    pub fn copyString(allocator: *GcAllocator, slice: []const u8) !*ObjString {
+        return createString(allocator, try allocator.allocator().dupe(u8, slice));
     }
 
-    pub fn deinit(self: *ObjString) void {
-        self.string.deinit();
+    pub fn takeString(allocator: *GcAllocator, slice: []const u8) !*ObjString {
+        return createString(allocator, slice);
+    }
+
+    fn createString(allocator: *GcAllocator, slice: []const u8) !*ObjString {
+        const string = try allocator.createString();
+        string.string = slice;
+        string.obj.type = Obj.Type.OBJ_STRING;
+        return string;
+    }
+
+    pub fn deinitWithAllocator(self: *ObjString, allocator: Allocator) void {
+        allocator.free(self.string);
     }
 
     pub fn print(self: ObjString, writer: std.fs.File.Writer) !void {
-        try writer.print("{s}", .{self.string.items});
-    }
-
-    pub fn appendSliceAssumeCapacity(self: *ObjString, items: []const u8) void {
-        self.string.appendSliceAssumeCapacity(items);
+        try writer.print("{s}", .{self.string});
     }
 };

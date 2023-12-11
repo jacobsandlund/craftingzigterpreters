@@ -34,9 +34,8 @@ fn trackObject(self: *Self, obj: *Obj) void {
     self.objects = obj;
 }
 
-pub fn createString(self: *Self, capacity: usize) !*ObjString {
+pub fn createString(self: *Self) !*ObjString {
     const string = try self.backingAllocator.create(ObjString);
-    string.* = try ObjString.initCapacity(self.backingAllocator, capacity);
     self.trackObject(&string.obj);
     return string;
 }

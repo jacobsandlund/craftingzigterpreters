@@ -36,7 +36,7 @@ pub const Value = union(Type) {
             .boolean => return a.boolean == b.boolean,
             .nil => return true,
             .number => return a.number == b.number,
-            .obj => return Obj.equal(a.obj, b.obj),
+            .obj => return a.obj == b.obj,
         }
 
         return true;

@@ -22,13 +22,6 @@ pub const Obj = struct {
         }
     }
 
-    pub fn equal(a: *Obj, b: *Obj) bool {
-        // TODO: don't assume string
-        const aString = a.string().string;
-        const bString = b.string().string;
-        return std.mem.eql(u8, aString, bString);
-    }
-
     pub fn destroyWithAllocator(self: *Obj, allocator: Allocator) void {
         switch (self.type) {
             .OBJ_STRING => {
@@ -43,19 +36,33 @@ pub const Obj = struct {
 pub const ObjString = struct {
     obj: Obj,
     string: []const u8,
+    hash: u32,
 
     pub fn copyString(allocator: *GcAllocator, slice: []const u8) !*ObjString {
-        return createString(allocator, try allocator.allocator().dupe(u8, slice));
+        const hash = hashString(slice);
+        const interned: ?*ObjString = allocator.findString(slice, hash);
+        if (interned) |i| return i;
+
+        return createString(allocator, try allocator.allocator().dupe(u8, slice), hash);
     }
 
     pub fn takeString(allocator: *GcAllocator, slice: []const u8) !*ObjString {
-        return createString(allocator, slice);
+        const hash = hashString(slice);
+        const interned: ?*ObjString = allocator.findString(slice, hash);
+        if (interned) |i| {
+            allocator.allocator().free(slice);
+            return i;
+        }
+
+        return createString(allocator, slice, hash);
     }
 
-    fn createString(allocator: *GcAllocator, slice: []const u8) !*ObjString {
+    fn createString(allocator: *GcAllocator, slice: []const u8, hash: u32) !*ObjString {
         const string = try allocator.createString();
-        string.string = slice;
         string.obj.type = Obj.Type.OBJ_STRING;
+        string.string = slice;
+        string.hash = hash;
+        try allocator.storeString(string);
         return string;
     }
 
@@ -67,3 +74,12 @@ pub const ObjString = struct {
         try writer.print("{s}", .{self.string});
     }
 };
+
+fn hashString(slice: []const u8) u32 {
+    var hash: u32 = 2166136261;
+    for (slice) |char| {
+        hash ^= char;
+        hash *%= 16777619;
+    }
+    return hash;
+}

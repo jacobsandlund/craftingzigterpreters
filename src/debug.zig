@@ -38,6 +38,12 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         OpCode.OP_FALSE => {
             return try simpleInstruction(writer, "OP_FALSE", offset);
         },
+        OpCode.OP_POP => {
+            return try simpleInstruction(writer, "OP_POP", offset);
+        },
+        OpCode.OP_DEFINE_GLOBAL => {
+            return try constantInstruction(writer, "OP_DEFINE_GLOBAL", chunk, offset);
+        },
         OpCode.OP_EQUAL => {
             return try simpleInstruction(writer, "OP_EQUAL", offset);
         },
@@ -64,6 +70,9 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         },
         OpCode.OP_NEGATE => {
             return try simpleInstruction(writer, "OP_NEGATE", offset);
+        },
+        OpCode.OP_PRINT => {
+            return try simpleInstruction(writer, "OP_PRINT", offset);
         },
         OpCode.OP_RETURN => {
             return try simpleInstruction(writer, "OP_RETURN", offset);

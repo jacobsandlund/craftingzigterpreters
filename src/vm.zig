@@ -7,6 +7,7 @@ const compile = @import("compiler.zig").compile;
 const Obj = @import("object.zig").Obj;
 const ObjString = @import("object.zig").ObjString;
 const GcAllocator = @import("GcAllocator.zig");
+const Table = @import("table.zig");
 
 const OpCode = Chunk.OpCode;
 
@@ -17,6 +18,7 @@ ip: [*]u8,
 chunk: *Chunk,
 stack: [STACK_MAX]Value,
 stackTop: [*]Value,
+globals: Table,
 
 const Self = @This();
 
@@ -26,16 +28,19 @@ pub const InterpretError = error{
 } || std.fs.File.WriteError || std.mem.Allocator.Error;
 
 pub fn init(allocator: std.mem.Allocator) Self {
+    var gcAllocator = GcAllocator.init(allocator);
     return Self{
-        .allocator = GcAllocator.init(allocator),
+        .allocator = gcAllocator,
         .chunk = undefined,
         .ip = undefined,
         .stack = undefined,
         .stackTop = undefined,
+        .globals = Table.init(gcAllocator.allocator()),
     };
 }
 
 pub fn deinit(self: *Self) void {
+    self.globals.deinit();
     self.allocator.deinit();
 }
 
@@ -126,14 +131,14 @@ pub fn run(self: *Self) InterpretError!void {
                 const constant = self.readConstant(chunk);
                 self.push(constant);
             },
-            OpCode.OP_NIL => {
-                self.push(Value.nil);
-            },
-            OpCode.OP_TRUE => {
-                self.push(Value{ .boolean = true });
-            },
-            OpCode.OP_FALSE => {
-                self.push(Value{ .boolean = false });
+            OpCode.OP_NIL => self.push(Value.nil),
+            OpCode.OP_TRUE => self.push(Value{ .boolean = true }),
+            OpCode.OP_FALSE => self.push(Value{ .boolean = false }),
+            OpCode.OP_POP => _ = self.pop(),
+            OpCode.OP_DEFINE_GLOBAL => {
+                const name: *ObjString = self.readString(chunk);
+                _ = try self.globals.set(name, self.peek(0));
+                _ = self.pop();
             },
             OpCode.OP_EQUAL => {
                 const b = self.pop();
@@ -207,9 +212,12 @@ pub fn run(self: *Self) InterpretError!void {
                 }
                 self.push(.{ .number = -(self.pop().number) });
             },
-            OpCode.OP_RETURN => {
+            OpCode.OP_PRINT => {
                 try self.pop().print(writer);
                 try writer.print("\n", .{});
+            },
+            OpCode.OP_RETURN => {
+                // Exit interpreter.
                 return;
             },
             _ => {
@@ -228,6 +236,10 @@ inline fn readByte(self: *Self) u8 {
 
 fn readConstant(self: *Self, chunk: *Chunk) Value {
     return chunk.constants.values.items[self.readByte()];
+}
+
+fn readString(self: *Self, chunk: *Chunk) *ObjString {
+    return self.readConstant(chunk).obj.string();
 }
 
 fn concatenate(self: *Self) !void {

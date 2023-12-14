@@ -105,8 +105,11 @@ pub fn compile(allocator_: *GcAllocator, source: []const u8, chunk: *Chunk) !boo
     parser.panicMode = false;
 
     advance();
-    try expression();
-    consume(Token.Type.TOKEN_EOF, "Expect end of expression.");
+
+    while (!match(Token.Type.TOKEN_EOF)) {
+        try declaration();
+    }
+
     try endCompiler();
     return !parser.hadError;
 }
@@ -160,6 +163,17 @@ fn consume(tokenType: Token.Type, message: []const u8) void {
     }
 
     errorAtCurrent(message);
+}
+
+fn check(tokenType: Token.Type) bool {
+    return parser.current.type == tokenType;
+}
+
+fn match(tokenType: Token.Type) bool {
+    if (!check(tokenType)) return false;
+
+    advance();
+    return true;
 }
 
 fn currentChunk() *Chunk {
@@ -235,6 +249,77 @@ fn expression() ParseError!void {
     try parsePrecedence(Precedence.PREC_ASSIGNMENT);
 }
 
+fn declaration() ParseError!void {
+    if (match(Token.Type.TOKEN_VAR)) {
+        try varDeclaration();
+    } else {
+        try statement();
+    }
+
+    if (parser.panicMode) synchronize();
+}
+
+fn varDeclaration() ParseError!void {
+    const global: u8 = try parseVariable("Expect variable name.");
+
+    if (match(Token.Type.TOKEN_EQUAL)) {
+        try expression();
+    } else {
+        try emitOpCode(OpCode.OP_NIL);
+    }
+    consume(Token.Type.TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+
+    try defineVariable(global);
+}
+
+fn statement() ParseError!void {
+    if (match(Token.Type.TOKEN_PRINT)) {
+        try printStatement();
+    } else {
+        try expressionStatement();
+    }
+}
+
+fn synchronize() void {
+    parser.panicMode = false;
+
+    while (parser.current.type != Token.Type.TOKEN_EOF) {
+        if (parser.previous.type == Token.Type.TOKEN_SEMICOLON) return;
+        switch (parser.current.type) {
+            Token.Type.TOKEN_CLASS, Token.Type.TOKEN_FUN, Token.Type.TOKEN_VAR, Token.Type.TOKEN_FOR, Token.Type.TOKEN_IF, Token.Type.TOKEN_WHILE, Token.Type.TOKEN_PRINT, Token.Type.TOKEN_RETURN => return,
+            else => {
+                // Do nothing.
+            },
+        }
+    }
+}
+
+fn parseVariable(errorMessage: []const u8) !u8 {
+    consume(Token.Type.TOKEN_IDENTIFIER, errorMessage);
+    return identifierConstant(&parser.previous);
+}
+
+fn identifierConstant(name: *Token) !u8 {
+    const stringObj = try ObjString.copyString(allocator, name.slice);
+    return makeConstant(Value{ .obj = &stringObj.obj });
+}
+
+fn defineVariable(global: u8) !void {
+    try emitOpCodeWithByte(OpCode.OP_DEFINE_GLOBAL, global);
+}
+
+fn printStatement() ParseError!void {
+    try expression();
+    consume(Token.Type.TOKEN_SEMICOLON, "Expect ';' after value.");
+    try emitOpCode(OpCode.OP_PRINT);
+}
+
+fn expressionStatement() ParseError!void {
+    try expression();
+    consume(Token.Type.TOKEN_SEMICOLON, "Expect ';' after expression.");
+    try emitOpCode(OpCode.OP_POP);
+}
+
 fn grouping() ParseError!void {
     try expression();
     consume(Token.Type.TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
@@ -296,9 +381,7 @@ fn binary() ParseError!void {
         Token.Type.TOKEN_SLASH => {
             try emitOpCode(OpCode.OP_DIVIDE);
         },
-        else => {
-            unreachable;
-        },
+        else => unreachable,
     }
 }
 

@@ -97,57 +97,23 @@ pub fn scanToken(self: *Self) Token {
     if (isDigit(c)) return self.number();
 
     switch (c) {
-        '(' => {
-            return self.makeToken(Token.Type.TOKEN_LEFT_PAREN);
-        },
-        ')' => {
-            return self.makeToken(Token.Type.TOKEN_RIGHT_PAREN);
-        },
-        '{' => {
-            return self.makeToken(Token.Type.TOKEN_LEFT_BRACE);
-        },
-        '}' => {
-            return self.makeToken(Token.Type.TOKEN_LEFT_BRACE);
-        },
-        ';' => {
-            return self.makeToken(Token.Type.TOKEN_SEMICOLON);
-        },
-        ',' => {
-            return self.makeToken(Token.Type.TOKEN_COMMA);
-        },
-        '.' => {
-            return self.makeToken(Token.Type.TOKEN_DOT);
-        },
-        '-' => {
-            return self.makeToken(Token.Type.TOKEN_MINUS);
-        },
-        '+' => {
-            return self.makeToken(Token.Type.TOKEN_PLUS);
-        },
-        '/' => {
-            return self.makeToken(Token.Type.TOKEN_SLASH);
-        },
-        '*' => {
-            return self.makeToken(Token.Type.TOKEN_STAR);
-        },
-        '!' => {
-            return self.makeToken(if (self.match('=')) Token.Type.TOKEN_BANG_EQUAL else Token.Type.TOKEN_BANG);
-        },
-        '=' => {
-            return self.makeToken(if (self.match('=')) Token.Type.TOKEN_EQUAL_EQUAL else Token.Type.TOKEN_EQUAL);
-        },
-        '<' => {
-            return self.makeToken(if (self.match('=')) Token.Type.TOKEN_LESS_EQUAL else Token.Type.TOKEN_LESS);
-        },
-        '>' => {
-            return self.makeToken(if (self.match('=')) Token.Type.TOKEN_GREATER_EQUAL else Token.Type.TOKEN_GREATER);
-        },
-        '"' => {
-            return self.string();
-        },
-        else => {
-            return self.errorToken("Unexpected character.");
-        },
+        '(' => return self.makeToken(Token.Type.TOKEN_LEFT_PAREN),
+        ')' => return self.makeToken(Token.Type.TOKEN_RIGHT_PAREN),
+        '{' => return self.makeToken(Token.Type.TOKEN_LEFT_BRACE),
+        '}' => return self.makeToken(Token.Type.TOKEN_LEFT_BRACE),
+        ';' => return self.makeToken(Token.Type.TOKEN_SEMICOLON),
+        ',' => return self.makeToken(Token.Type.TOKEN_COMMA),
+        '.' => return self.makeToken(Token.Type.TOKEN_DOT),
+        '-' => return self.makeToken(Token.Type.TOKEN_MINUS),
+        '+' => return self.makeToken(Token.Type.TOKEN_PLUS),
+        '/' => return self.makeToken(Token.Type.TOKEN_SLASH),
+        '*' => return self.makeToken(Token.Type.TOKEN_STAR),
+        '!' => return self.makeToken(if (self.match('=')) Token.Type.TOKEN_BANG_EQUAL else Token.Type.TOKEN_BANG),
+        '=' => return self.makeToken(if (self.match('=')) Token.Type.TOKEN_EQUAL_EQUAL else Token.Type.TOKEN_EQUAL),
+        '<' => return self.makeToken(if (self.match('=')) Token.Type.TOKEN_LESS_EQUAL else Token.Type.TOKEN_LESS),
+        '>' => return self.makeToken(if (self.match('=')) Token.Type.TOKEN_GREATER_EQUAL else Token.Type.TOKEN_GREATER),
+        '"' => return self.string(),
+        else => return self.errorToken("Unexpected character."),
     }
 }
 
@@ -196,9 +162,7 @@ fn skipWhitespace(self: *Self) void {
     while (!self.isAtEnd()) {
         const c: u8 = self.peek();
         switch (c) {
-            ' ', '\r', '\t' => {
-                _ = self.advance();
-            },
+            ' ', '\r', '\t' => _ = self.advance(),
             '\n' => {
                 self.line += 1;
                 _ = self.advance();
@@ -211,9 +175,7 @@ fn skipWhitespace(self: *Self) void {
                     return;
                 }
             },
-            else => {
-                return;
-            },
+            else => return,
         }
     }
 }
@@ -225,79 +187,37 @@ fn identifier(self: *Self) Token {
 
 fn identifierType(self: Self) Token.Type {
     switch (self.start[0]) {
-        'a' => {
-            return self.checkKeyword(1, "nd", Token.Type.TOKEN_AND);
-        },
-        'c' => {
-            return self.checkKeyword(1, "lass", Token.Type.TOKEN_CLASS);
-        },
-        'e' => {
-            return self.checkKeyword(1, "lse", Token.Type.TOKEN_ELSE);
-        },
+        'a' => return self.checkKeyword(1, "nd", Token.Type.TOKEN_AND),
+        'c' => return self.checkKeyword(1, "lass", Token.Type.TOKEN_CLASS),
+        'e' => return self.checkKeyword(1, "lse", Token.Type.TOKEN_ELSE),
         'f' => {
             if (@intFromPtr(self.current) - @intFromPtr(self.start) > 1) {
                 switch (self.start[1]) {
-                    'a' => {
-                        return self.checkKeyword(2, "lse", Token.Type.TOKEN_FALSE);
-                    },
-                    'o' => {
-                        return self.checkKeyword(2, "r", Token.Type.TOKEN_FOR);
-                    },
-                    'u' => {
-                        return self.checkKeyword(2, "1", Token.Type.TOKEN_FUN);
-                    },
-                    else => {
-                        return Token.Type.TOKEN_IDENTIFIER;
-                    },
+                    'a' => return self.checkKeyword(2, "lse", Token.Type.TOKEN_FALSE),
+                    'o' => return self.checkKeyword(2, "r", Token.Type.TOKEN_FOR),
+                    'u' => return self.checkKeyword(2, "1", Token.Type.TOKEN_FUN),
+                    else => return Token.Type.TOKEN_IDENTIFIER,
                 }
-            } else {
-                return Token.Type.TOKEN_IDENTIFIER;
-            }
+            } else return Token.Type.TOKEN_IDENTIFIER;
         },
-        'i' => {
-            return self.checkKeyword(1, "f", Token.Type.TOKEN_IF);
-        },
-        'n' => {
-            return self.checkKeyword(1, "il", Token.Type.TOKEN_NIL);
-        },
-        'o' => {
-            return self.checkKeyword(1, "r", Token.Type.TOKEN_OR);
-        },
-        'p' => {
-            return self.checkKeyword(1, "rint", Token.Type.TOKEN_PRINT);
-        },
-        'r' => {
-            return self.checkKeyword(1, "eturn", Token.Type.TOKEN_RETURN);
-        },
-        's' => {
-            return self.checkKeyword(1, "uper", Token.Type.TOKEN_SUPER);
-        },
+        'i' => return self.checkKeyword(1, "f", Token.Type.TOKEN_IF),
+        'n' => return self.checkKeyword(1, "il", Token.Type.TOKEN_NIL),
+        'o' => return self.checkKeyword(1, "r", Token.Type.TOKEN_OR),
+        'p' => return self.checkKeyword(1, "rint", Token.Type.TOKEN_PRINT),
+        'r' => return self.checkKeyword(1, "eturn", Token.Type.TOKEN_RETURN),
+        's' => return self.checkKeyword(1, "uper", Token.Type.TOKEN_SUPER),
         't' => {
             if (@intFromPtr(self.current) - @intFromPtr(self.start) > 1) {
                 switch (self.start[1]) {
-                    'h' => {
-                        return self.checkKeyword(2, "is", Token.Type.TOKEN_THIS);
-                    },
-                    'r' => {
-                        return self.checkKeyword(2, "ue", Token.Type.TOKEN_TRUE);
-                    },
-                    else => {
-                        return Token.Type.TOKEN_IDENTIFIER;
-                    },
+                    'h' => return self.checkKeyword(2, "is", Token.Type.TOKEN_THIS),
+                    'r' => return self.checkKeyword(2, "ue", Token.Type.TOKEN_TRUE),
+                    else => return Token.Type.TOKEN_IDENTIFIER,
                 }
-            } else {
-                return Token.Type.TOKEN_IDENTIFIER;
-            }
+            } else return Token.Type.TOKEN_IDENTIFIER;
         },
-        'v' => {
-            return self.checkKeyword(1, "ar", Token.Type.TOKEN_VAR);
-        },
-        'w' => {
-            return self.checkKeyword(1, "hile", Token.Type.TOKEN_WHILE);
-        },
-        else => {
-            return Token.Type.TOKEN_IDENTIFIER;
-        },
+        'v' => return self.checkKeyword(1, "ar", Token.Type.TOKEN_VAR),
+        'w' => return self.checkKeyword(1, "hile", Token.Type.TOKEN_WHILE),
+        else => return Token.Type.TOKEN_IDENTIFIER,
     }
 }
 

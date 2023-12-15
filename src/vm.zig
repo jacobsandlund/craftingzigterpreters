@@ -135,10 +135,28 @@ pub fn run(self: *Self) InterpretError!void {
             OpCode.OP_TRUE => self.push(Value{ .boolean = true }),
             OpCode.OP_FALSE => self.push(Value{ .boolean = false }),
             OpCode.OP_POP => _ = self.pop(),
-            OpCode.OP_DEFINE_GLOBAL => {
+            OpCode.OP_GET_GLOBAL => {
                 const name: *ObjString = self.readString(chunk);
+                const value = self.globals.get(name);
+                if (value) |v| {
+                    self.push(v);
+                } else {
+                    try self.runtimeError("Undefined variable '{s}'.", .{name.string});
+                    return InterpretError.RuntimeError;
+                }
+            },
+            OpCode.OP_DEFINE_GLOBAL => {
+                const name = self.readString(chunk);
                 _ = try self.globals.set(name, self.peek(0));
                 _ = self.pop();
+            },
+            OpCode.OP_SET_GLOBAL => {
+                const name = self.readString(chunk);
+                if (try self.globals.set(name, self.peek(0))) {
+                    _ = self.globals.delete(name);
+                    try self.runtimeError("Undefined variable '{s}'.", .{name.string});
+                    return InterpretError.RuntimeError;
+                }
             },
             OpCode.OP_EQUAL => {
                 const b = self.pop();

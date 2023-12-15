@@ -62,7 +62,7 @@ pub fn addAll(self: *Self, from: *Self) void {
 pub fn get(self: *Self, key: *ObjString) ?Value {
     if (self.count == 0) return null;
 
-    const entry = findEntry(self.entry, key);
+    const entry = findEntry(self.entries, key);
     if (entry.key == null) return null;
 
     return entry.value;
@@ -89,11 +89,12 @@ pub fn findString(self: *Self, slice: []const u8, hash: u32) ?*ObjString {
 pub fn delete(self: *Self, key: *ObjString) bool {
     if (self.count == 0) return false;
 
-    const entry = findEntry(self.entry, key);
+    const entry = findEntry(self.entries, key);
     if (entry.key == null) return false;
 
     entry.key = null;
     entry.value = Value{ .boolean = true };
+    return true;
 }
 
 fn adjustCapacity(self: *Self) !void {

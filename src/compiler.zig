@@ -36,7 +36,7 @@ const Precedence = enum {
 
 const ParseError = std.mem.Allocator.Error;
 
-const ParseFn = *const fn () ParseError!void;
+const ParseFn = *const fn (canAssign: bool) ParseError!void;
 
 const ParseRule = struct {
     prefix: ?ParseFn,
@@ -71,7 +71,7 @@ const rules = blk: {
     r.set(Token.Type.TOKEN_GREATER_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
     r.set(Token.Type.TOKEN_LESS, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
     r.set(Token.Type.TOKEN_LESS_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
-    r.set(Token.Type.TOKEN_IDENTIFIER, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(Token.Type.TOKEN_IDENTIFIER, .{ .prefix = variable, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_STRING, .{ .prefix = string, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_NUMBER, .{ .prefix = number, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(Token.Type.TOKEN_AND, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
@@ -230,9 +230,11 @@ fn endCompiler() !void {
 
 fn parsePrecedence(precedence: Precedence) ParseError!void {
     advance();
+
+    const canAssign = @intFromEnum(precedence) <= @intFromEnum(Precedence.PREC_ASSIGNMENT);
     const prefixRule = rules.get(parser.previous.type).prefix;
     if (prefixRule) |parseFn| {
-        try parseFn();
+        try parseFn(canAssign);
     } else {
         error_("Expect expression.");
         return;
@@ -241,7 +243,11 @@ fn parsePrecedence(precedence: Precedence) ParseError!void {
     while (@intFromEnum(precedence) < @intFromEnum(rules.get(parser.current.type).precedence)) {
         advance();
         const infixRule = rules.get(parser.previous.type).infix.?;
-        try infixRule();
+        try infixRule(canAssign);
+    }
+
+    if (canAssign and match(Token.Type.TOKEN_EQUAL)) {
+        error_("Invalid assignment target.");
     }
 }
 
@@ -320,12 +326,12 @@ fn expressionStatement() ParseError!void {
     try emitOpCode(OpCode.OP_POP);
 }
 
-fn grouping() ParseError!void {
+fn grouping(_: bool) ParseError!void {
     try expression();
     consume(Token.Type.TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
-fn unary() ParseError!void {
+fn unary(_: bool) ParseError!void {
     const operatorType = parser.previous.type;
 
     // Compile the operand.
@@ -345,7 +351,7 @@ fn unary() ParseError!void {
     }
 }
 
-fn binary() ParseError!void {
+fn binary(_: bool) ParseError!void {
     const operatorType = parser.previous.type;
     const rule: ParseRule = rules.get(operatorType);
     try parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1));
@@ -385,7 +391,7 @@ fn binary() ParseError!void {
     }
 }
 
-fn literal() ParseError!void {
+fn literal(_: bool) ParseError!void {
     switch (parser.previous.type) {
         Token.Type.TOKEN_FALSE => {
             try emitOpCode(OpCode.OP_FALSE);
@@ -402,7 +408,7 @@ fn literal() ParseError!void {
     }
 }
 
-fn number() ParseError!void {
+fn number(_: bool) ParseError!void {
     const value: f64 = std.fmt.parseFloat(f64, parser.previous.slice) catch {
         error_("Could not parse float.");
         return;
@@ -410,7 +416,22 @@ fn number() ParseError!void {
     try emitConstant(Value{ .number = value });
 }
 
-fn string() ParseError!void {
+fn string(_: bool) ParseError!void {
     const stringObj = try ObjString.copyString(allocator, parser.previous.slice[1 .. parser.previous.slice.len - 1]);
     try emitConstant(Value{ .obj = &stringObj.obj });
+}
+
+fn variable(canAssign: bool) ParseError!void {
+    try namedVariable(&parser.previous, canAssign);
+}
+
+fn namedVariable(name: *Token, canAssign: bool) ParseError!void {
+    const arg = try identifierConstant(name);
+
+    if (canAssign and match(Token.Type.TOKEN_EQUAL)) {
+        try expression();
+        try emitOpCodeWithByte(OpCode.OP_SET_GLOBAL, arg);
+    } else {
+        try emitOpCodeWithByte(OpCode.OP_GET_GLOBAL, arg);
+    }
 }

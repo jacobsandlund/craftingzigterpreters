@@ -41,8 +41,14 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         OpCode.OP_POP => {
             return try simpleInstruction(writer, "OP_POP", offset);
         },
+        OpCode.OP_GET_GLOBAL => {
+            return try constantInstruction(writer, "OP_GET_GLOBAL", chunk, offset);
+        },
         OpCode.OP_DEFINE_GLOBAL => {
             return try constantInstruction(writer, "OP_DEFINE_GLOBAL", chunk, offset);
+        },
+        OpCode.OP_SET_GLOBAL => {
+            return try constantInstruction(writer, "OP_SET_GLOBAL", chunk, offset);
         },
         OpCode.OP_EQUAL => {
             return try simpleInstruction(writer, "OP_EQUAL", offset);

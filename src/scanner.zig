@@ -100,7 +100,7 @@ pub fn scanToken(self: *Self) Token {
         '(' => return self.makeToken(Token.Type.TOKEN_LEFT_PAREN),
         ')' => return self.makeToken(Token.Type.TOKEN_RIGHT_PAREN),
         '{' => return self.makeToken(Token.Type.TOKEN_LEFT_BRACE),
-        '}' => return self.makeToken(Token.Type.TOKEN_LEFT_BRACE),
+        '}' => return self.makeToken(Token.Type.TOKEN_RIGHT_BRACE),
         ';' => return self.makeToken(Token.Type.TOKEN_SEMICOLON),
         ',' => return self.makeToken(Token.Type.TOKEN_COMMA),
         '.' => return self.makeToken(Token.Type.TOKEN_DOT),

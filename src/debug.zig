@@ -41,6 +41,12 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         OpCode.OP_POP => {
             return try simpleInstruction(writer, "OP_POP", offset);
         },
+        OpCode.OP_GET_LOCAL => {
+            return try byteInstruction(writer, "OP_GET_LOCAL", chunk, offset);
+        },
+        OpCode.OP_SET_LOCAL => {
+            return try byteInstruction(writer, "OP_SET_LOCAL", chunk, offset);
+        },
         OpCode.OP_GET_GLOBAL => {
             return try constantInstruction(writer, "OP_GET_GLOBAL", chunk, offset);
         },
@@ -93,6 +99,12 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
 fn simpleInstruction(writer: Writer, name: []const u8, offset: usize) !usize {
     try writer.print("{s}\n", .{name});
     return offset + 1;
+}
+
+fn byteInstruction(writer: Writer, name: []const u8, chunk: *Chunk, offset: usize) !usize {
+    const slot = chunk.code.items[offset + 1];
+    try writer.print("{s:<16} {d:4}\n", .{ name, slot });
+    return offset + 2;
 }
 
 fn constantInstruction(writer: Writer, name: []const u8, chunk: *Chunk, offset: usize) !usize {

@@ -135,6 +135,14 @@ pub fn run(self: *Self) InterpretError!void {
             OpCode.OP_TRUE => self.push(Value{ .boolean = true }),
             OpCode.OP_FALSE => self.push(Value{ .boolean = false }),
             OpCode.OP_POP => _ = self.pop(),
+            OpCode.OP_GET_LOCAL => {
+                const slot = self.readByte();
+                self.push(self.stack[slot]);
+            },
+            OpCode.OP_SET_LOCAL => {
+                const slot = self.readByte();
+                self.stack[slot] = self.peek(0);
+            },
             OpCode.OP_GET_GLOBAL => {
                 const name: *ObjString = self.readString(chunk);
                 const value = self.globals.get(name);

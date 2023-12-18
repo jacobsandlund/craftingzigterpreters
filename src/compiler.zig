@@ -9,7 +9,6 @@ const GcAllocator = @import("GcAllocator.zig");
 const Scanner = @import("scanner.zig");
 
 const Token = Scanner.Token;
-const print = std.debug.print;
 const OpCode = Chunk.OpCode;
 const panic = std.debug.panic;
 
@@ -44,7 +43,36 @@ const ParseRule = struct {
     precedence: Precedence,
 };
 
+const Local = struct {
+    name: Token,
+    depth: isize,
+};
+
+const Compiler = struct {
+    locals: [std.math.maxInt(u8) + 1]Local = undefined,
+    localCount: usize = 0,
+    scopeDepth: isize = 0,
+
+    const Self = @This();
+
+    fn resolveLocal(self: *Self, name: *const Token) isize {
+        var i: isize = @as(isize, @intCast(current.localCount)) - 1;
+        while (i >= 0) : (i -= 1) {
+            const local = &self.locals[@intCast(i)];
+            if (identifiersEqual(name, &local.name)) {
+                if (local.depth == -1) {
+                    error_("Can't read local variable in its own initializer.");
+                }
+                return i;
+            }
+        }
+
+        return -1;
+    }
+};
+
 var parser: Parser = undefined;
+var current: *Compiler = undefined;
 var scanner: Scanner = undefined;
 var compilingChunk: *Chunk = undefined;
 var allocator: *GcAllocator = undefined;
@@ -98,6 +126,8 @@ const rules = blk: {
 
 pub fn compile(allocator_: *GcAllocator, source: []const u8, chunk: *Chunk) !bool {
     scanner = Scanner.init(source);
+    var compiler = Compiler{};
+    current = &compiler;
     compilingChunk = chunk;
     allocator = allocator_;
 
@@ -228,6 +258,19 @@ fn endCompiler() !void {
     }
 }
 
+fn beginScope() void {
+    current.scopeDepth += 1;
+}
+
+fn endScope() ParseError!void {
+    current.scopeDepth -= 1;
+
+    while (current.localCount > 0 and current.locals[current.localCount - 1].depth > current.scopeDepth) {
+        try emitOpCode(OpCode.OP_POP);
+        current.localCount -= 1;
+    }
+}
+
 fn parsePrecedence(precedence: Precedence) ParseError!void {
     advance();
 
@@ -281,6 +324,10 @@ fn varDeclaration() ParseError!void {
 fn statement() ParseError!void {
     if (match(Token.Type.TOKEN_PRINT)) {
         try printStatement();
+    } else if (match(Token.Type.TOKEN_LEFT_BRACE)) {
+        beginScope();
+        try block();
+        try endScope();
     } else {
         try expressionStatement();
     }
@@ -302,22 +349,78 @@ fn synchronize() void {
 
 fn parseVariable(errorMessage: []const u8) !u8 {
     consume(Token.Type.TOKEN_IDENTIFIER, errorMessage);
+
+    declareVariable();
+    if (current.scopeDepth > 0) return 0;
+
     return identifierConstant(&parser.previous);
 }
 
-fn identifierConstant(name: *Token) !u8 {
+fn identifierConstant(name: *const Token) !u8 {
     const stringObj = try ObjString.copyString(allocator, name.slice);
     return makeConstant(Value{ .obj = &stringObj.obj });
 }
 
+fn declareVariable() void {
+    if (current.scopeDepth == 0) return;
+
+    const name = &parser.previous;
+    var i: isize = @as(isize, @intCast(current.localCount)) - 1;
+    while (i >= 0) : (i -= 1) {
+        const local = &current.locals[@intCast(i)];
+        if (local.depth != -1 and local.depth < current.scopeDepth) {
+            break;
+        }
+
+        if (identifiersEqual(name, &local.name)) {
+            error_("Already a variable with this name in this scope.");
+        }
+    }
+
+    addLocal(name.*);
+}
+
+fn identifiersEqual(a: *const Token, b: *const Token) bool {
+    return std.mem.eql(u8, a.slice, b.slice);
+}
+
+fn addLocal(name: Token) void {
+    if (current.localCount == current.locals.len) {
+        error_("Too many local variables in function.");
+        return;
+    }
+
+    var local: *Local = &current.locals[current.localCount];
+    current.localCount += 1;
+    local.name = name;
+    local.depth = -1;
+}
+
 fn defineVariable(global: u8) !void {
+    if (current.scopeDepth > 0) {
+        markInitialized();
+        return;
+    }
+
     try emitOpCodeWithByte(OpCode.OP_DEFINE_GLOBAL, global);
+}
+
+fn markInitialized() void {
+    current.locals[current.localCount - 1].depth = current.scopeDepth;
 }
 
 fn printStatement() ParseError!void {
     try expression();
     consume(Token.Type.TOKEN_SEMICOLON, "Expect ';' after value.");
     try emitOpCode(OpCode.OP_PRINT);
+}
+
+fn block() ParseError!void {
+    while (!check(Token.Type.TOKEN_RIGHT_BRACE) and !check(Token.Type.TOKEN_EOF)) {
+        try declaration();
+    }
+
+    consume(Token.Type.TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
 
 fn expressionStatement() ParseError!void {
@@ -422,16 +525,26 @@ fn string(_: bool) ParseError!void {
 }
 
 fn variable(canAssign: bool) ParseError!void {
-    try namedVariable(&parser.previous, canAssign);
+    try namedVariable(parser.previous, canAssign);
 }
 
-fn namedVariable(name: *Token, canAssign: bool) ParseError!void {
-    const arg = try identifierConstant(name);
+fn namedVariable(name: Token, canAssign: bool) ParseError!void {
+    var getOp: OpCode = undefined;
+    var setOp: OpCode = undefined;
+    var arg: isize = current.resolveLocal(&name);
+    if (arg != -1) {
+        getOp = OpCode.OP_GET_LOCAL;
+        setOp = OpCode.OP_SET_LOCAL;
+    } else {
+        arg = try identifierConstant(&name);
+        getOp = OpCode.OP_GET_GLOBAL;
+        setOp = OpCode.OP_SET_GLOBAL;
+    }
 
     if (canAssign and match(Token.Type.TOKEN_EQUAL)) {
         try expression();
-        try emitOpCodeWithByte(OpCode.OP_SET_GLOBAL, arg);
+        try emitOpCodeWithByte(setOp, @intCast(arg));
     } else {
-        try emitOpCodeWithByte(OpCode.OP_GET_GLOBAL, arg);
+        try emitOpCodeWithByte(getOp, @intCast(arg));
     }
 }

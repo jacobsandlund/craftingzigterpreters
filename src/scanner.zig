@@ -89,7 +89,7 @@ pub fn scanToken(self: *Self) Token {
     self.skipWhitespace();
     self.start = self.current;
 
-    if (self.isAtEnd()) return self.makeToken(Token.Type.TOKEN_EOF);
+    if (self.isAtEnd()) return self.makeToken(.TOKEN_EOF);
 
     const c: u8 = self.advance();
 
@@ -97,21 +97,21 @@ pub fn scanToken(self: *Self) Token {
     if (isDigit(c)) return self.number();
 
     switch (c) {
-        '(' => return self.makeToken(Token.Type.TOKEN_LEFT_PAREN),
-        ')' => return self.makeToken(Token.Type.TOKEN_RIGHT_PAREN),
-        '{' => return self.makeToken(Token.Type.TOKEN_LEFT_BRACE),
-        '}' => return self.makeToken(Token.Type.TOKEN_RIGHT_BRACE),
-        ';' => return self.makeToken(Token.Type.TOKEN_SEMICOLON),
-        ',' => return self.makeToken(Token.Type.TOKEN_COMMA),
-        '.' => return self.makeToken(Token.Type.TOKEN_DOT),
-        '-' => return self.makeToken(Token.Type.TOKEN_MINUS),
-        '+' => return self.makeToken(Token.Type.TOKEN_PLUS),
-        '/' => return self.makeToken(Token.Type.TOKEN_SLASH),
-        '*' => return self.makeToken(Token.Type.TOKEN_STAR),
-        '!' => return self.makeToken(if (self.match('=')) Token.Type.TOKEN_BANG_EQUAL else Token.Type.TOKEN_BANG),
-        '=' => return self.makeToken(if (self.match('=')) Token.Type.TOKEN_EQUAL_EQUAL else Token.Type.TOKEN_EQUAL),
-        '<' => return self.makeToken(if (self.match('=')) Token.Type.TOKEN_LESS_EQUAL else Token.Type.TOKEN_LESS),
-        '>' => return self.makeToken(if (self.match('=')) Token.Type.TOKEN_GREATER_EQUAL else Token.Type.TOKEN_GREATER),
+        '(' => return self.makeToken(.TOKEN_LEFT_PAREN),
+        ')' => return self.makeToken(.TOKEN_RIGHT_PAREN),
+        '{' => return self.makeToken(.TOKEN_LEFT_BRACE),
+        '}' => return self.makeToken(.TOKEN_RIGHT_BRACE),
+        ';' => return self.makeToken(.TOKEN_SEMICOLON),
+        ',' => return self.makeToken(.TOKEN_COMMA),
+        '.' => return self.makeToken(.TOKEN_DOT),
+        '-' => return self.makeToken(.TOKEN_MINUS),
+        '+' => return self.makeToken(.TOKEN_PLUS),
+        '/' => return self.makeToken(.TOKEN_SLASH),
+        '*' => return self.makeToken(.TOKEN_STAR),
+        '!' => return self.makeToken(if (self.match('=')) .TOKEN_BANG_EQUAL else .TOKEN_BANG),
+        '=' => return self.makeToken(if (self.match('=')) .TOKEN_EQUAL_EQUAL else .TOKEN_EQUAL),
+        '<' => return self.makeToken(if (self.match('=')) .TOKEN_LESS_EQUAL else .TOKEN_LESS),
+        '>' => return self.makeToken(if (self.match('=')) .TOKEN_GREATER_EQUAL else .TOKEN_GREATER),
         '"' => return self.string(),
         else => return self.errorToken("Unexpected character."),
     }
@@ -152,7 +152,7 @@ fn makeToken(self: Self, tokenType: Token.Type) Token {
 
 fn errorToken(self: Self, message: []const u8) Token {
     return Token{
-        .type = Token.Type.TOKEN_ERROR,
+        .type = .TOKEN_ERROR,
         .slice = message,
         .line = self.line,
     };
@@ -187,37 +187,37 @@ fn identifier(self: *Self) Token {
 
 fn identifierType(self: Self) Token.Type {
     switch (self.start[0]) {
-        'a' => return self.checkKeyword(1, "nd", Token.Type.TOKEN_AND),
-        'c' => return self.checkKeyword(1, "lass", Token.Type.TOKEN_CLASS),
-        'e' => return self.checkKeyword(1, "lse", Token.Type.TOKEN_ELSE),
+        'a' => return self.checkKeyword(1, "nd", .TOKEN_AND),
+        'c' => return self.checkKeyword(1, "lass", .TOKEN_CLASS),
+        'e' => return self.checkKeyword(1, "lse", .TOKEN_ELSE),
         'f' => {
             if (@intFromPtr(self.current) - @intFromPtr(self.start) > 1) {
                 switch (self.start[1]) {
-                    'a' => return self.checkKeyword(2, "lse", Token.Type.TOKEN_FALSE),
-                    'o' => return self.checkKeyword(2, "r", Token.Type.TOKEN_FOR),
-                    'u' => return self.checkKeyword(2, "1", Token.Type.TOKEN_FUN),
-                    else => return Token.Type.TOKEN_IDENTIFIER,
+                    'a' => return self.checkKeyword(2, "lse", .TOKEN_FALSE),
+                    'o' => return self.checkKeyword(2, "r", .TOKEN_FOR),
+                    'u' => return self.checkKeyword(2, "1", .TOKEN_FUN),
+                    else => return .TOKEN_IDENTIFIER,
                 }
-            } else return Token.Type.TOKEN_IDENTIFIER;
+            } else return .TOKEN_IDENTIFIER;
         },
-        'i' => return self.checkKeyword(1, "f", Token.Type.TOKEN_IF),
-        'n' => return self.checkKeyword(1, "il", Token.Type.TOKEN_NIL),
-        'o' => return self.checkKeyword(1, "r", Token.Type.TOKEN_OR),
-        'p' => return self.checkKeyword(1, "rint", Token.Type.TOKEN_PRINT),
-        'r' => return self.checkKeyword(1, "eturn", Token.Type.TOKEN_RETURN),
-        's' => return self.checkKeyword(1, "uper", Token.Type.TOKEN_SUPER),
+        'i' => return self.checkKeyword(1, "f", .TOKEN_IF),
+        'n' => return self.checkKeyword(1, "il", .TOKEN_NIL),
+        'o' => return self.checkKeyword(1, "r", .TOKEN_OR),
+        'p' => return self.checkKeyword(1, "rint", .TOKEN_PRINT),
+        'r' => return self.checkKeyword(1, "eturn", .TOKEN_RETURN),
+        's' => return self.checkKeyword(1, "uper", .TOKEN_SUPER),
         't' => {
             if (@intFromPtr(self.current) - @intFromPtr(self.start) > 1) {
                 switch (self.start[1]) {
-                    'h' => return self.checkKeyword(2, "is", Token.Type.TOKEN_THIS),
-                    'r' => return self.checkKeyword(2, "ue", Token.Type.TOKEN_TRUE),
-                    else => return Token.Type.TOKEN_IDENTIFIER,
+                    'h' => return self.checkKeyword(2, "is", .TOKEN_THIS),
+                    'r' => return self.checkKeyword(2, "ue", .TOKEN_TRUE),
+                    else => return .TOKEN_IDENTIFIER,
                 }
-            } else return Token.Type.TOKEN_IDENTIFIER;
+            } else return .TOKEN_IDENTIFIER;
         },
-        'v' => return self.checkKeyword(1, "ar", Token.Type.TOKEN_VAR),
-        'w' => return self.checkKeyword(1, "hile", Token.Type.TOKEN_WHILE),
-        else => return Token.Type.TOKEN_IDENTIFIER,
+        'v' => return self.checkKeyword(1, "ar", .TOKEN_VAR),
+        'w' => return self.checkKeyword(1, "hile", .TOKEN_WHILE),
+        else => return .TOKEN_IDENTIFIER,
     }
 }
 
@@ -226,7 +226,7 @@ fn checkKeyword(self: Self, start: usize, rest: []const u8, tokenType: Token.Typ
         return tokenType;
     }
 
-    return Token.Type.TOKEN_IDENTIFIER;
+    return .TOKEN_IDENTIFIER;
 }
 
 fn number(self: *Self) Token {
@@ -240,7 +240,7 @@ fn number(self: *Self) Token {
         while (!self.isAtEnd() and isDigit(self.peek())) _ = self.advance();
     }
 
-    return self.makeToken(Token.Type.TOKEN_NUMBER);
+    return self.makeToken(.TOKEN_NUMBER);
 }
 
 fn string(self: *Self) Token {
@@ -255,5 +255,5 @@ fn string(self: *Self) Token {
 
     // The closing quote
     _ = self.advance();
-    return self.makeToken(Token.Type.TOKEN_STRING);
+    return self.makeToken(.TOKEN_STRING);
 }

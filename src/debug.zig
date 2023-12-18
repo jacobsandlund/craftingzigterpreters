@@ -26,67 +26,73 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
 
     const instruction: OpCode = @enumFromInt(chunk.code.items[offset]);
     switch (instruction) {
-        OpCode.OP_CONSTANT => {
+        .OP_CONSTANT => {
             return try constantInstruction(writer, "OP_CONSTANT", chunk, offset);
         },
-        OpCode.OP_NIL => {
+        .OP_NIL => {
             return try simpleInstruction(writer, "OP_NIL", offset);
         },
-        OpCode.OP_TRUE => {
+        .OP_TRUE => {
             return try simpleInstruction(writer, "OP_TRUE", offset);
         },
-        OpCode.OP_FALSE => {
+        .OP_FALSE => {
             return try simpleInstruction(writer, "OP_FALSE", offset);
         },
-        OpCode.OP_POP => {
+        .OP_POP => {
             return try simpleInstruction(writer, "OP_POP", offset);
         },
-        OpCode.OP_GET_LOCAL => {
+        .OP_GET_LOCAL => {
             return try byteInstruction(writer, "OP_GET_LOCAL", chunk, offset);
         },
-        OpCode.OP_SET_LOCAL => {
+        .OP_SET_LOCAL => {
             return try byteInstruction(writer, "OP_SET_LOCAL", chunk, offset);
         },
-        OpCode.OP_GET_GLOBAL => {
+        .OP_GET_GLOBAL => {
             return try constantInstruction(writer, "OP_GET_GLOBAL", chunk, offset);
         },
-        OpCode.OP_DEFINE_GLOBAL => {
+        .OP_DEFINE_GLOBAL => {
             return try constantInstruction(writer, "OP_DEFINE_GLOBAL", chunk, offset);
         },
-        OpCode.OP_SET_GLOBAL => {
+        .OP_SET_GLOBAL => {
             return try constantInstruction(writer, "OP_SET_GLOBAL", chunk, offset);
         },
-        OpCode.OP_EQUAL => {
+        .OP_EQUAL => {
             return try simpleInstruction(writer, "OP_EQUAL", offset);
         },
-        OpCode.OP_GREATER => {
+        .OP_GREATER => {
             return try simpleInstruction(writer, "OP_GREATER", offset);
         },
-        OpCode.OP_LESS => {
+        .OP_LESS => {
             return try simpleInstruction(writer, "OP_LESS", offset);
         },
-        OpCode.OP_ADD => {
+        .OP_ADD => {
             return try simpleInstruction(writer, "OP_ADD", offset);
         },
-        OpCode.OP_SUBTRACT => {
+        .OP_SUBTRACT => {
             return try simpleInstruction(writer, "OP_SUBTRACT", offset);
         },
-        OpCode.OP_MULTIPLY => {
+        .OP_MULTIPLY => {
             return try simpleInstruction(writer, "OP_MULTIPLY", offset);
         },
-        OpCode.OP_DIVIDE => {
+        .OP_DIVIDE => {
             return try simpleInstruction(writer, "OP_DIVIDE", offset);
         },
-        OpCode.OP_NOT => {
+        .OP_NOT => {
             return try simpleInstruction(writer, "OP_NOT", offset);
         },
-        OpCode.OP_NEGATE => {
+        .OP_NEGATE => {
             return try simpleInstruction(writer, "OP_NEGATE", offset);
         },
-        OpCode.OP_PRINT => {
+        .OP_PRINT => {
             return try simpleInstruction(writer, "OP_PRINT", offset);
         },
-        OpCode.OP_RETURN => {
+        .OP_JUMP => {
+            return try jumpInstruction(writer, "OP_JUMP", 1, chunk, offset);
+        },
+        .OP_JUMP_IF_FALSE => {
+            return try jumpInstruction(writer, "OP_JUMP", 1, chunk, offset);
+        },
+        .OP_RETURN => {
             return try simpleInstruction(writer, "OP_RETURN", offset);
         },
         _ => {
@@ -113,4 +119,10 @@ fn constantInstruction(writer: Writer, name: []const u8, chunk: *Chunk, offset: 
     try chunk.constants.values.items[constant].print(writer);
     try writer.print("'\n", .{});
     return offset + 2;
+}
+
+fn jumpInstruction(writer: Writer, name: []const u8, sign: isize, chunk: *Chunk, offset: usize) !usize {
+    const jump = (@as(u16, chunk.code.items[offset + 1]) << 8) | (chunk.code.items[offset + 2]);
+    try writer.print("{s:<16} {d:4} -> {d}\n", .{ name, offset, @as(isize, @intCast(offset)) + 3 + sign * @as(isize, @intCast(jump)) });
+    return offset + 3;
 }

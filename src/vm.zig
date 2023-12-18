@@ -127,23 +127,23 @@ pub fn run(self: *Self) InterpretError!void {
 
         const instruction: OpCode = @enumFromInt(self.readByte());
         switch (instruction) {
-            OpCode.OP_CONSTANT => {
+            .OP_CONSTANT => {
                 const constant = self.readConstant(chunk);
                 self.push(constant);
             },
-            OpCode.OP_NIL => self.push(Value.nil),
-            OpCode.OP_TRUE => self.push(Value{ .boolean = true }),
-            OpCode.OP_FALSE => self.push(Value{ .boolean = false }),
-            OpCode.OP_POP => _ = self.pop(),
-            OpCode.OP_GET_LOCAL => {
+            .OP_NIL => self.push(Value.nil),
+            .OP_TRUE => self.push(Value{ .boolean = true }),
+            .OP_FALSE => self.push(Value{ .boolean = false }),
+            .OP_POP => _ = self.pop(),
+            .OP_GET_LOCAL => {
                 const slot = self.readByte();
                 self.push(self.stack[slot]);
             },
-            OpCode.OP_SET_LOCAL => {
+            .OP_SET_LOCAL => {
                 const slot = self.readByte();
                 self.stack[slot] = self.peek(0);
             },
-            OpCode.OP_GET_GLOBAL => {
+            .OP_GET_GLOBAL => {
                 const name: *ObjString = self.readString(chunk);
                 const value = self.globals.get(name);
                 if (value) |v| {
@@ -153,12 +153,12 @@ pub fn run(self: *Self) InterpretError!void {
                     return InterpretError.RuntimeError;
                 }
             },
-            OpCode.OP_DEFINE_GLOBAL => {
+            .OP_DEFINE_GLOBAL => {
                 const name = self.readString(chunk);
                 _ = try self.globals.set(name, self.peek(0));
                 _ = self.pop();
             },
-            OpCode.OP_SET_GLOBAL => {
+            .OP_SET_GLOBAL => {
                 const name = self.readString(chunk);
                 if (try self.globals.set(name, self.peek(0))) {
                     _ = self.globals.delete(name);
@@ -166,12 +166,12 @@ pub fn run(self: *Self) InterpretError!void {
                     return InterpretError.RuntimeError;
                 }
             },
-            OpCode.OP_EQUAL => {
+            .OP_EQUAL => {
                 const b = self.pop();
                 const a = self.pop();
                 self.push(.{ .boolean = Value.equal(a, b) });
             },
-            OpCode.OP_GREATER => {
+            .OP_GREATER => {
                 if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
                     try self.runtimeError("Operands must be numbers.", .{});
                     return InterpretError.RuntimeError;
@@ -180,7 +180,7 @@ pub fn run(self: *Self) InterpretError!void {
                 const a = self.pop().number;
                 self.push(.{ .boolean = a > b });
             },
-            OpCode.OP_LESS => {
+            .OP_LESS => {
                 if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
                     try self.runtimeError("Operands must be numbers.", .{});
                     return InterpretError.RuntimeError;
@@ -189,7 +189,7 @@ pub fn run(self: *Self) InterpretError!void {
                 const a = self.pop().number;
                 self.push(.{ .boolean = a < b });
             },
-            OpCode.OP_ADD => {
+            .OP_ADD => {
                 if (self.peek(0).isObjType(Obj.Type.OBJ_STRING) and self.peek(1).isObjType(Obj.Type.OBJ_STRING)) {
                     try self.concatenate();
                 } else if (self.peek(0) == Value.number and self.peek(1) == Value.number) {
@@ -201,7 +201,7 @@ pub fn run(self: *Self) InterpretError!void {
                     return InterpretError.RuntimeError;
                 }
             },
-            OpCode.OP_SUBTRACT => {
+            .OP_SUBTRACT => {
                 if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
                     try self.runtimeError("Operands must be numbers.", .{});
                     return InterpretError.RuntimeError;
@@ -210,7 +210,7 @@ pub fn run(self: *Self) InterpretError!void {
                 const a = self.pop().number;
                 self.push(.{ .number = a - b });
             },
-            OpCode.OP_MULTIPLY => {
+            .OP_MULTIPLY => {
                 if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
                     try self.runtimeError("Operands must be numbers.", .{});
                     return InterpretError.RuntimeError;
@@ -219,7 +219,7 @@ pub fn run(self: *Self) InterpretError!void {
                 const a = self.pop().number;
                 self.push(.{ .number = a * b });
             },
-            OpCode.OP_DIVIDE => {
+            .OP_DIVIDE => {
                 if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
                     try self.runtimeError("Operands must be numbers.", .{});
                     return InterpretError.RuntimeError;
@@ -228,21 +228,29 @@ pub fn run(self: *Self) InterpretError!void {
                 const a = self.pop().number;
                 self.push(.{ .number = a / b });
             },
-            OpCode.OP_NOT => {
+            .OP_NOT => {
                 self.push(.{ .boolean = isFalsey(self.pop()) });
             },
-            OpCode.OP_NEGATE => {
+            .OP_NEGATE => {
                 if (self.peek(0) != Value.number) {
                     try self.runtimeError("Operand must be a number.", .{});
                     return InterpretError.RuntimeError;
                 }
                 self.push(.{ .number = -(self.pop().number) });
             },
-            OpCode.OP_PRINT => {
+            .OP_PRINT => {
                 try self.pop().print(writer);
                 try writer.print("\n", .{});
             },
-            OpCode.OP_RETURN => {
+            .OP_JUMP => {
+                const offset = self.readShort();
+                self.ip += offset;
+            },
+            .OP_JUMP_IF_FALSE => {
+                const offset = self.readShort();
+                if (isFalsey(self.peek(0))) self.ip += offset;
+            },
+            .OP_RETURN => {
                 // Exit interpreter.
                 return;
             },
@@ -258,6 +266,12 @@ inline fn readByte(self: *Self) u8 {
     const byte: u8 = self.ip[0];
     self.ip += 1;
     return byte;
+}
+
+inline fn readShort(self: *Self) u16 {
+    const short: u16 = @as(u16, self.ip[0]) << 8 | self.ip[1];
+    self.ip += 2;
+    return short;
 }
 
 fn readConstant(self: *Self, chunk: *Chunk) Value {

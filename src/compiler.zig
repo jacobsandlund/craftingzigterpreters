@@ -80,46 +80,46 @@ var allocator: *GcAllocator = undefined;
 const rules = blk: {
     var r: std.EnumArray(Token.Type, ParseRule) = undefined;
 
-    r.set(Token.Type.TOKEN_LEFT_PAREN, .{ .prefix = grouping, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_RIGHT_PAREN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_LEFT_BRACE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_RIGHT_BRACE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_COMMA, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_DOT, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_MINUS, .{ .prefix = unary, .infix = binary, .precedence = Precedence.PREC_TERM });
-    r.set(Token.Type.TOKEN_PLUS, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_TERM });
-    r.set(Token.Type.TOKEN_SEMICOLON, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_SLASH, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_FACTOR });
-    r.set(Token.Type.TOKEN_STAR, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_FACTOR });
-    r.set(Token.Type.TOKEN_BANG, .{ .prefix = unary, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_BANG_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_EQUALITY });
-    r.set(Token.Type.TOKEN_EQUAL, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_EQUAL_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_EQUALITY });
-    r.set(Token.Type.TOKEN_GREATER, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
-    r.set(Token.Type.TOKEN_GREATER_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
-    r.set(Token.Type.TOKEN_LESS, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
-    r.set(Token.Type.TOKEN_LESS_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
-    r.set(Token.Type.TOKEN_IDENTIFIER, .{ .prefix = variable, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_STRING, .{ .prefix = string, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_NUMBER, .{ .prefix = number, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_AND, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_CLASS, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_ELSE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_FALSE, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_FOR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_FUN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_IF, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_NIL, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_OR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_PRINT, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_RETURN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_SUPER, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_THIS, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_TRUE, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_VAR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_WHILE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_ERROR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(Token.Type.TOKEN_EOF, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_LEFT_PAREN, .{ .prefix = grouping, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_RIGHT_PAREN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_LEFT_BRACE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_RIGHT_BRACE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_COMMA, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_DOT, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_MINUS, .{ .prefix = unary, .infix = binary, .precedence = Precedence.PREC_TERM });
+    r.set(.TOKEN_PLUS, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_TERM });
+    r.set(.TOKEN_SEMICOLON, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_SLASH, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_FACTOR });
+    r.set(.TOKEN_STAR, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_FACTOR });
+    r.set(.TOKEN_BANG, .{ .prefix = unary, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_BANG_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_EQUALITY });
+    r.set(.TOKEN_EQUAL, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_EQUAL_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_EQUALITY });
+    r.set(.TOKEN_GREATER, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
+    r.set(.TOKEN_GREATER_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
+    r.set(.TOKEN_LESS, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
+    r.set(.TOKEN_LESS_EQUAL, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_COMPARISON });
+    r.set(.TOKEN_IDENTIFIER, .{ .prefix = variable, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_STRING, .{ .prefix = string, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_NUMBER, .{ .prefix = number, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_AND, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_CLASS, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_ELSE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_FALSE, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_FOR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_FUN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_IF, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_NIL, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_OR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_PRINT, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_RETURN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_SUPER, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_THIS, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_TRUE, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_VAR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_WHILE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_ERROR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_EOF, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
 
     break :blk r;
 };
@@ -136,7 +136,7 @@ pub fn compile(allocator_: *GcAllocator, source: []const u8, chunk: *Chunk) !boo
 
     advance();
 
-    while (!match(Token.Type.TOKEN_EOF)) {
+    while (!match(.TOKEN_EOF)) {
         try declaration();
     }
 
@@ -161,9 +161,9 @@ fn errorAt(token: *Token, message: []const u8) void {
 
     writer.print("[line {d}] Error", .{token.line}) catch panic("Error writing error", .{});
 
-    if (token.type == Token.Type.TOKEN_EOF) {
+    if (token.type == .TOKEN_EOF) {
         writer.print(" at end", .{}) catch panic("Error writing error", .{});
-    } else if (token.type == Token.Type.TOKEN_ERROR) {
+    } else if (token.type == .TOKEN_ERROR) {
         // Nothing.
     } else {
         writer.print(" at '{s}'", .{token.slice}) catch panic("Error writing error", .{});
@@ -178,7 +178,7 @@ fn advance() void {
 
     while (true) {
         parser.current = scanner.scanToken();
-        if (parser.current.type != Token.Type.TOKEN_ERROR) {
+        if (parser.current.type != .TOKEN_ERROR) {
             break;
         }
 
@@ -229,11 +229,29 @@ fn emitOpCodeWithByte(opCode: OpCode, byte: u8) ParseError!void {
 }
 
 fn emitReturn() ParseError!void {
-    try emitOpCode(OpCode.OP_RETURN);
+    try emitOpCode(.OP_RETURN);
 }
 
 fn emitConstant(value: Value) ParseError!void {
-    try emitOpCodeWithByte(OpCode.OP_CONSTANT, makeConstant(value));
+    try emitOpCodeWithByte(.OP_CONSTANT, makeConstant(value));
+}
+
+fn emitJump(opCode: OpCode) ParseError!usize {
+    try emitOpCode(opCode);
+    try emitByte(0xff);
+    try emitByte(0xff);
+    return currentChunk().code.items.len - 2;
+}
+
+fn patchJump(offset: usize) void {
+    const jump = currentChunk().code.items.len - offset - 2;
+
+    if (jump > std.math.maxInt(u16)) {
+        error_("Too much code to jump over.");
+    }
+
+    currentChunk().code.items[offset] = @intCast(jump >> 8);
+    currentChunk().code.items[offset + 1] = @truncate(jump);
 }
 
 fn makeConstant(value: Value) u8 {
@@ -246,7 +264,7 @@ fn makeConstant(value: Value) u8 {
         return 0;
     }
 
-    return @truncate(constant);
+    return @intCast(constant);
 }
 
 fn endCompiler() !void {
@@ -266,7 +284,7 @@ fn endScope() ParseError!void {
     current.scopeDepth -= 1;
 
     while (current.localCount > 0 and current.locals[current.localCount - 1].depth > current.scopeDepth) {
-        try emitOpCode(OpCode.OP_POP);
+        try emitOpCode(.OP_POP);
         current.localCount -= 1;
     }
 }
@@ -289,7 +307,7 @@ fn parsePrecedence(precedence: Precedence) ParseError!void {
         try infixRule(canAssign);
     }
 
-    if (canAssign and match(Token.Type.TOKEN_EQUAL)) {
+    if (canAssign and match(.TOKEN_EQUAL)) {
         error_("Invalid assignment target.");
     }
 }
@@ -299,7 +317,7 @@ fn expression() ParseError!void {
 }
 
 fn declaration() ParseError!void {
-    if (match(Token.Type.TOKEN_VAR)) {
+    if (match(.TOKEN_VAR)) {
         try varDeclaration();
     } else {
         try statement();
@@ -311,20 +329,22 @@ fn declaration() ParseError!void {
 fn varDeclaration() ParseError!void {
     const global: u8 = try parseVariable("Expect variable name.");
 
-    if (match(Token.Type.TOKEN_EQUAL)) {
+    if (match(.TOKEN_EQUAL)) {
         try expression();
     } else {
-        try emitOpCode(OpCode.OP_NIL);
+        try emitOpCode(.OP_NIL);
     }
-    consume(Token.Type.TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+    consume(.TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
 
     try defineVariable(global);
 }
 
 fn statement() ParseError!void {
-    if (match(Token.Type.TOKEN_PRINT)) {
+    if (match(.TOKEN_PRINT)) {
         try printStatement();
-    } else if (match(Token.Type.TOKEN_LEFT_BRACE)) {
+    } else if (match(.TOKEN_IF)) {
+        try ifStatement();
+    } else if (match(.TOKEN_LEFT_BRACE)) {
         beginScope();
         try block();
         try endScope();
@@ -336,10 +356,10 @@ fn statement() ParseError!void {
 fn synchronize() void {
     parser.panicMode = false;
 
-    while (parser.current.type != Token.Type.TOKEN_EOF) {
-        if (parser.previous.type == Token.Type.TOKEN_SEMICOLON) return;
+    while (parser.current.type != .TOKEN_EOF) {
+        if (parser.previous.type == .TOKEN_SEMICOLON) return;
         switch (parser.current.type) {
-            Token.Type.TOKEN_CLASS, Token.Type.TOKEN_FUN, Token.Type.TOKEN_VAR, Token.Type.TOKEN_FOR, Token.Type.TOKEN_IF, Token.Type.TOKEN_WHILE, Token.Type.TOKEN_PRINT, Token.Type.TOKEN_RETURN => return,
+            .TOKEN_CLASS, .TOKEN_FUN, .TOKEN_VAR, .TOKEN_FOR, .TOKEN_IF, .TOKEN_WHILE, .TOKEN_PRINT, .TOKEN_RETURN => return,
             else => {
                 // Do nothing.
             },
@@ -348,7 +368,7 @@ fn synchronize() void {
 }
 
 fn parseVariable(errorMessage: []const u8) !u8 {
-    consume(Token.Type.TOKEN_IDENTIFIER, errorMessage);
+    consume(.TOKEN_IDENTIFIER, errorMessage);
 
     declareVariable();
     if (current.scopeDepth > 0) return 0;
@@ -402,7 +422,7 @@ fn defineVariable(global: u8) !void {
         return;
     }
 
-    try emitOpCodeWithByte(OpCode.OP_DEFINE_GLOBAL, global);
+    try emitOpCodeWithByte(.OP_DEFINE_GLOBAL, global);
 }
 
 fn markInitialized() void {
@@ -411,27 +431,45 @@ fn markInitialized() void {
 
 fn printStatement() ParseError!void {
     try expression();
-    consume(Token.Type.TOKEN_SEMICOLON, "Expect ';' after value.");
-    try emitOpCode(OpCode.OP_PRINT);
+    consume(.TOKEN_SEMICOLON, "Expect ';' after value.");
+    try emitOpCode(.OP_PRINT);
+}
+
+fn ifStatement() ParseError!void {
+    consume(.TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
+    try expression();
+    consume(.TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+    const thenJump = try emitJump(.OP_JUMP_IF_FALSE);
+    try emitOpCode(.OP_POP);
+    try statement();
+
+    const elseJump = try emitJump(.OP_JUMP);
+
+    patchJump(thenJump);
+    try emitOpCode(.OP_POP);
+
+    if (match(.TOKEN_ELSE)) try statement();
+    patchJump(elseJump);
 }
 
 fn block() ParseError!void {
-    while (!check(Token.Type.TOKEN_RIGHT_BRACE) and !check(Token.Type.TOKEN_EOF)) {
+    while (!check(.TOKEN_RIGHT_BRACE) and !check(.TOKEN_EOF)) {
         try declaration();
     }
 
-    consume(Token.Type.TOKEN_RIGHT_BRACE, "Expect '}' after block.");
+    consume(.TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
 
 fn expressionStatement() ParseError!void {
     try expression();
-    consume(Token.Type.TOKEN_SEMICOLON, "Expect ';' after expression.");
-    try emitOpCode(OpCode.OP_POP);
+    consume(.TOKEN_SEMICOLON, "Expect ';' after expression.");
+    try emitOpCode(.OP_POP);
 }
 
 fn grouping(_: bool) ParseError!void {
     try expression();
-    consume(Token.Type.TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
+    consume(.TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
 fn unary(_: bool) ParseError!void {
@@ -442,11 +480,11 @@ fn unary(_: bool) ParseError!void {
 
     // Emit the operator instruction.
     switch (operatorType) {
-        Token.Type.TOKEN_BANG => {
-            try emitOpCode(OpCode.OP_NOT);
+        .TOKEN_BANG => {
+            try emitOpCode(.OP_NOT);
         },
-        Token.Type.TOKEN_MINUS => {
-            try emitOpCode(OpCode.OP_NEGATE);
+        .TOKEN_MINUS => {
+            try emitOpCode(.OP_NEGATE);
         },
         else => {
             unreachable;
@@ -460,35 +498,35 @@ fn binary(_: bool) ParseError!void {
     try parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1));
 
     switch (operatorType) {
-        Token.Type.TOKEN_BANG_EQUAL => {
+        .TOKEN_BANG_EQUAL => {
             try emitBytes(@intFromEnum(OpCode.OP_ADD), @intFromEnum(OpCode.OP_NOT));
         },
-        Token.Type.TOKEN_EQUAL_EQUAL => {
-            try emitOpCode(OpCode.OP_EQUAL);
+        .TOKEN_EQUAL_EQUAL => {
+            try emitOpCode(.OP_EQUAL);
         },
-        Token.Type.TOKEN_GREATER => {
-            try emitOpCode(OpCode.OP_GREATER);
+        .TOKEN_GREATER => {
+            try emitOpCode(.OP_GREATER);
         },
-        Token.Type.TOKEN_GREATER_EQUAL => {
+        .TOKEN_GREATER_EQUAL => {
             try emitBytes(@intFromEnum(OpCode.OP_LESS), @intFromEnum(OpCode.OP_NOT));
         },
-        Token.Type.TOKEN_LESS => {
-            try emitOpCode(OpCode.OP_LESS);
+        .TOKEN_LESS => {
+            try emitOpCode(.OP_LESS);
         },
-        Token.Type.TOKEN_LESS_EQUAL => {
+        .TOKEN_LESS_EQUAL => {
             try emitBytes(@intFromEnum(OpCode.OP_GREATER), @intFromEnum(OpCode.OP_NOT));
         },
-        Token.Type.TOKEN_PLUS => {
-            try emitOpCode(OpCode.OP_ADD);
+        .TOKEN_PLUS => {
+            try emitOpCode(.OP_ADD);
         },
-        Token.Type.TOKEN_MINUS => {
-            try emitOpCode(OpCode.OP_SUBTRACT);
+        .TOKEN_MINUS => {
+            try emitOpCode(.OP_SUBTRACT);
         },
-        Token.Type.TOKEN_STAR => {
-            try emitOpCode(OpCode.OP_MULTIPLY);
+        .TOKEN_STAR => {
+            try emitOpCode(.OP_MULTIPLY);
         },
-        Token.Type.TOKEN_SLASH => {
-            try emitOpCode(OpCode.OP_DIVIDE);
+        .TOKEN_SLASH => {
+            try emitOpCode(.OP_DIVIDE);
         },
         else => unreachable,
     }
@@ -496,14 +534,14 @@ fn binary(_: bool) ParseError!void {
 
 fn literal(_: bool) ParseError!void {
     switch (parser.previous.type) {
-        Token.Type.TOKEN_FALSE => {
-            try emitOpCode(OpCode.OP_FALSE);
+        .TOKEN_FALSE => {
+            try emitOpCode(.OP_FALSE);
         },
-        Token.Type.TOKEN_NIL => {
-            try emitOpCode(OpCode.OP_NIL);
+        .TOKEN_NIL => {
+            try emitOpCode(.OP_NIL);
         },
-        Token.Type.TOKEN_TRUE => {
-            try emitOpCode(OpCode.OP_TRUE);
+        .TOKEN_TRUE => {
+            try emitOpCode(.OP_TRUE);
         },
         else => {
             unreachable;
@@ -533,15 +571,15 @@ fn namedVariable(name: Token, canAssign: bool) ParseError!void {
     var setOp: OpCode = undefined;
     var arg: isize = current.resolveLocal(&name);
     if (arg != -1) {
-        getOp = OpCode.OP_GET_LOCAL;
-        setOp = OpCode.OP_SET_LOCAL;
+        getOp = .OP_GET_LOCAL;
+        setOp = .OP_SET_LOCAL;
     } else {
         arg = try identifierConstant(&name);
-        getOp = OpCode.OP_GET_GLOBAL;
-        setOp = OpCode.OP_SET_GLOBAL;
+        getOp = .OP_GET_GLOBAL;
+        setOp = .OP_SET_GLOBAL;
     }
 
-    if (canAssign and match(Token.Type.TOKEN_EQUAL)) {
+    if (canAssign and match(.TOKEN_EQUAL)) {
         try expression();
         try emitOpCodeWithByte(setOp, @intCast(arg));
     } else {

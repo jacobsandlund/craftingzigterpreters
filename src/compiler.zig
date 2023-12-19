@@ -102,7 +102,7 @@ const rules = blk: {
     r.set(.TOKEN_IDENTIFIER, .{ .prefix = variable, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_STRING, .{ .prefix = string, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_NUMBER, .{ .prefix = number, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(.TOKEN_AND, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_AND, .{ .prefix = null, .infix = and_, .precedence = Precedence.PREC_AND });
     r.set(.TOKEN_CLASS, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_ELSE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_FALSE, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
@@ -110,7 +110,7 @@ const rules = blk: {
     r.set(.TOKEN_FUN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_IF, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_NIL, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(.TOKEN_OR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_OR, .{ .prefix = null, .infix = or_, .precedence = Precedence.PREC_OR });
     r.set(.TOKEN_PRINT, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_RETURN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_SUPER, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
@@ -530,6 +530,26 @@ fn binary(_: bool) ParseError!void {
         },
         else => unreachable,
     }
+}
+
+fn and_(_: bool) ParseError!void {
+    const endJump = try emitJump(.OP_JUMP_IF_FALSE);
+
+    try emitOpCode(.OP_POP);
+    try parsePrecedence(.PREC_AND);
+
+    patchJump(endJump);
+}
+
+fn or_(_: bool) ParseError!void {
+    const elseJump = try emitJump(.OP_JUMP_IF_FALSE);
+    const endJump = try emitJump(.OP_JUMP);
+
+    patchJump(elseJump);
+    try emitOpCode(.OP_POP);
+
+    try parsePrecedence(.PREC_OR);
+    patchJump(endJump);
 }
 
 fn literal(_: bool) ParseError!void {

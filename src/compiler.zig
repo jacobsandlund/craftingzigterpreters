@@ -243,6 +243,18 @@ fn emitJump(opCode: OpCode) ParseError!usize {
     return currentChunk().code.items.len - 2;
 }
 
+fn emitLoop(loopStart: usize) ParseError!void {
+    try emitOpCode(.OP_LOOP);
+
+    const offset = currentChunk().code.items.len - loopStart + 2;
+    if (offset > std.math.maxInt(u16)) {
+        error_("Loop body too large.");
+    }
+
+    try emitByte(@intCast(offset >> 8));
+    try emitByte(@truncate(offset));
+}
+
 fn patchJump(offset: usize) void {
     const jump = currentChunk().code.items.len - offset - 2;
 
@@ -342,8 +354,12 @@ fn varDeclaration() ParseError!void {
 fn statement() ParseError!void {
     if (match(.TOKEN_PRINT)) {
         try printStatement();
+    } else if (match(.TOKEN_FOR)) {
+        try forStatment();
     } else if (match(.TOKEN_IF)) {
         try ifStatement();
+    } else if (match(.TOKEN_WHILE)) {
+        try whileStatement();
     } else if (match(.TOKEN_LEFT_BRACE)) {
         beginScope();
         try block();
@@ -435,6 +451,51 @@ fn printStatement() ParseError!void {
     try emitOpCode(.OP_PRINT);
 }
 
+fn forStatment() ParseError!void {
+    beginScope();
+    consume(.TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
+    if (match(.TOKEN_SEMICOLON)) {
+        // Empty initializer.
+    } else if (match(.TOKEN_VAR)) {
+        try varDeclaration();
+    } else {
+        try expressionStatement();
+    }
+
+    var loopStart = currentChunk().code.items.len;
+    var exitJump: isize = -1;
+    if (!match(.TOKEN_SEMICOLON)) {
+        try expression();
+        consume(.TOKEN_SEMICOLON, "Expect ';' after loop condition.");
+
+        // Jump out of the loop if the condition is false.
+        exitJump = @intCast(try emitJump(.OP_JUMP_IF_FALSE));
+        try emitOpCode(.OP_POP);
+    }
+
+    if (!match(.TOKEN_RIGHT_PAREN)) {
+        const bodyJump = try emitJump(.OP_JUMP);
+        const incrementStart = currentChunk().code.items.len;
+        try expression();
+        try emitOpCode(.OP_POP);
+        consume(.TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
+
+        try emitLoop(loopStart);
+        loopStart = incrementStart;
+        patchJump(bodyJump);
+    }
+
+    try statement();
+    try emitLoop(loopStart);
+
+    if (exitJump != -1) {
+        patchJump(@intCast(exitJump));
+        try emitOpCode(.OP_POP);
+    }
+
+    try endScope();
+}
+
 fn ifStatement() ParseError!void {
     consume(.TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
     try expression();
@@ -451,6 +512,21 @@ fn ifStatement() ParseError!void {
 
     if (match(.TOKEN_ELSE)) try statement();
     patchJump(elseJump);
+}
+
+fn whileStatement() ParseError!void {
+    const loopStart = currentChunk().code.items.len;
+    consume(.TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
+    try expression();
+    consume(.TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+    const exitJump = try emitJump(.OP_JUMP_IF_FALSE);
+    try emitOpCode(.OP_POP);
+    try statement();
+    try emitLoop(loopStart);
+
+    patchJump(exitJump);
+    try emitOpCode(.OP_POP);
 }
 
 fn block() ParseError!void {

@@ -250,6 +250,10 @@ pub fn run(self: *Self) InterpretError!void {
                 const offset = self.readShort();
                 if (isFalsey(self.peek(0))) self.ip += offset;
             },
+            .OP_LOOP => {
+                const offset = self.readShort();
+                self.ip -= offset;
+            },
             .OP_RETURN => {
                 // Exit interpreter.
                 return;

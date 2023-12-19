@@ -92,6 +92,9 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         .OP_JUMP_IF_FALSE => {
             return try jumpInstruction(writer, "OP_JUMP", 1, chunk, offset);
         },
+        .OP_LOOP => {
+            return try jumpInstruction(writer, "OP_LOOP", -1, chunk, offset);
+        },
         .OP_RETURN => {
             return try simpleInstruction(writer, "OP_RETURN", offset);
         },

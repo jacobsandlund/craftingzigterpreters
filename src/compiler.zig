@@ -4,6 +4,7 @@ const Value = @import("value.zig").Value;
 const DEBUG_PRINT_CODE = @import("common.zig").DEBUG_PRINT_CODE;
 const dissassembleChunk = @import("debug.zig").dissassembleChunk;
 const ObjString = @import("object.zig").ObjString;
+const ObjFunction = @import("object.zig").ObjFunction;
 const GcAllocator = @import("GcAllocator.zig");
 
 const Scanner = @import("scanner.zig");
@@ -48,12 +49,33 @@ const Local = struct {
     depth: isize,
 };
 
+const FunctionType = enum {
+    TYPE_FUNCTION,
+    TYPE_SCRIPT,
+};
+
 const Compiler = struct {
-    locals: [std.math.maxInt(u8) + 1]Local = undefined,
+    function: *ObjFunction,
+    type: FunctionType,
+
+    locals: [std.math.maxInt(u8) + 1]Local,
     localCount: usize = 0,
     scopeDepth: isize = 0,
 
     const Self = @This();
+
+    fn init(allocator_: *GcAllocator, functionType: FunctionType) !Self {
+        var compiler: Self = .{
+            .function = try ObjFunction.create(allocator_),
+            .type = functionType,
+            .locals = undefined,
+        };
+        var local = &compiler.locals[0];
+        compiler.localCount += 1;
+        local.depth = 0;
+        local.name.slice = "";
+        return compiler;
+    }
 
     fn resolveLocal(self: *Self, name: *const Token) isize {
         var i: isize = @as(isize, @intCast(current.localCount)) - 1;
@@ -74,8 +96,11 @@ const Compiler = struct {
 var parser: Parser = undefined;
 var current: *Compiler = undefined;
 var scanner: Scanner = undefined;
-var compilingChunk: *Chunk = undefined;
 var allocator: *GcAllocator = undefined;
+
+fn currentChunk() *Chunk {
+    return &current.function.chunk;
+}
 
 const rules = blk: {
     var r: std.EnumArray(Token.Type, ParseRule) = undefined;
@@ -124,12 +149,11 @@ const rules = blk: {
     break :blk r;
 };
 
-pub fn compile(allocator_: *GcAllocator, source: []const u8, chunk: *Chunk) !bool {
+pub fn compile(allocator_: *GcAllocator, source: []const u8) !?*ObjFunction {
     scanner = Scanner.init(source);
-    var compiler = Compiler{};
-    current = &compiler;
-    compilingChunk = chunk;
     allocator = allocator_;
+    var compiler = try Compiler.init(allocator, .TYPE_SCRIPT);
+    current = &compiler;
 
     parser.hadError = false;
     parser.panicMode = false;
@@ -140,8 +164,8 @@ pub fn compile(allocator_: *GcAllocator, source: []const u8, chunk: *Chunk) !boo
         try declaration();
     }
 
-    try endCompiler();
-    return !parser.hadError;
+    const function = try endCompiler();
+    return if (parser.hadError) null else function;
 }
 
 fn errorAtCurrent(message: []const u8) void {
@@ -204,10 +228,6 @@ fn match(tokenType: Token.Type) bool {
 
     advance();
     return true;
-}
-
-fn currentChunk() *Chunk {
-    return compilingChunk;
 }
 
 fn emitByte(byte: u8) ParseError!void {
@@ -279,13 +299,17 @@ fn makeConstant(value: Value) u8 {
     return @intCast(constant);
 }
 
-fn endCompiler() !void {
+fn endCompiler() !*ObjFunction {
     try emitReturn();
+    const function = current.function;
+
     if (DEBUG_PRINT_CODE) {
         if (!parser.hadError) {
-            _ = try dissassembleChunk(currentChunk(), "code");
+            _ = try dissassembleChunk(currentChunk(), if (function.name) |name| name.string else "<script>");
         }
     }
+
+    return function;
 }
 
 fn beginScope() void {

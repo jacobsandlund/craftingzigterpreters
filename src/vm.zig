@@ -4,21 +4,30 @@ const Value = @import("value.zig").Value;
 const DEBUG_TRACE_EXECUTION = @import("common.zig").DEBUG_TRACE_EXECUTION;
 const disassembleInstruction = @import("debug.zig").disassembleInstruction;
 const compile = @import("compiler.zig").compile;
-const Obj = @import("object.zig").Obj;
-const ObjString = @import("object.zig").ObjString;
+const object = @import("object.zig");
 const GcAllocator = @import("GcAllocator.zig");
 const Table = @import("table.zig");
 
 const OpCode = Chunk.OpCode;
+const Obj = object.Obj;
+const ObjString = object.ObjString;
+const ObjFunction = object.ObjFunction;
 
-const STACK_MAX = 256;
+const FRAMES_MAX = 64;
+const STACK_MAX = FRAMES_MAX * (std.math.maxInt(u8) + 1);
 
 allocator: GcAllocator,
-ip: [*]u8,
-chunk: *Chunk,
+frames: [FRAMES_MAX]CallFrame,
+frameCount: usize,
 stack: [STACK_MAX]Value,
 stackTop: [*]Value,
 globals: Table,
+
+const CallFrame = struct {
+    function: *ObjFunction,
+    ip: [*]u8,
+    slots: [*]Value,
+};
 
 const Self = @This();
 
@@ -31,8 +40,8 @@ pub fn init(allocator: std.mem.Allocator) Self {
     var gcAllocator = GcAllocator.init(allocator);
     return Self{
         .allocator = gcAllocator,
-        .chunk = undefined,
-        .ip = undefined,
+        .frames = undefined,
+        .frameCount = 0,
         .stack = undefined,
         .stackTop = undefined,
         .globals = Table.init(gcAllocator.allocator()),
@@ -46,6 +55,7 @@ pub fn deinit(self: *Self) void {
 
 fn resetStack(self: *Self) void {
     self.stackTop = @ptrCast(&self.stack);
+    self.frameCount = 0;
 }
 
 fn runtimeError(self: *Self, comptime fmt: []const u8, args: anytype) !void {
@@ -54,8 +64,9 @@ fn runtimeError(self: *Self, comptime fmt: []const u8, args: anytype) !void {
 
     try errWriter.print(fmt, args);
 
-    const instruction = @intFromPtr(self.ip) - @intFromPtr(self.chunk.code.items.ptr) - 1;
-    const line = self.chunk.lines.items[instruction];
+    const frame = &self.frames[self.frameCount - 1];
+    const instruction = @intFromPtr(frame.ip) - @intFromPtr(frame.function.chunk.code.items.ptr) - 1;
+    const line = frame.function.chunk.lines.items[instruction];
     try errWriter.print("[line {d}] in script\n", .{line});
     self.resetStack();
 }
@@ -82,23 +93,25 @@ pub fn interpret(self: *Self, source: []const u8) InterpretError!void {
     const stderr = std.io.getStdErr();
     const errWriter = stderr.writer();
 
-    var chunk = Chunk.init(self.allocator.allocator());
-    defer chunk.deinit();
-
-    const success = compile(&self.allocator, source, &chunk) catch |err| {
+    const function = compile(&self.allocator, source) catch |err| {
         try errWriter.print("Got error when trying to compile: {}\n", .{err});
 
-        return InterpretError.CompileError;
+        return error.CompileError;
     };
 
-    if (!success) {
-        return InterpretError.CompileError;
+    if (function) |f| {
+        self.resetStack();
+        self.push(Value{ .obj = &f.obj });
+        var frame = &self.frames[self.frameCount];
+        self.frameCount += 1;
+        frame.function = f;
+        frame.ip = f.chunk.code.items.ptr;
+        frame.slots = @ptrCast(&self.stack);
+
+        return self.run();
+    } else {
+        return error.CompileError;
     }
-
-    self.chunk = &chunk;
-    self.ip = chunk.code.items.ptr;
-
-    return self.run();
 }
 
 pub fn run(self: *Self) InterpretError!void {
@@ -106,9 +119,7 @@ pub fn run(self: *Self) InterpretError!void {
     const stderr = std.io.getStdErr();
     const writer = stdout.writer();
     const errWriter = stderr.writer();
-    var chunk = self.chunk;
-
-    self.resetStack();
+    var frame = &self.frames[self.frameCount - 1];
 
     while (true) {
         if (DEBUG_TRACE_EXECUTION) {
@@ -122,13 +133,13 @@ pub fn run(self: *Self) InterpretError!void {
             }
             try errWriter.print("\n", .{});
 
-            _ = try disassembleInstruction(errWriter, chunk, @intFromPtr(self.ip) - @intFromPtr(chunk.code.items.ptr));
+            _ = try disassembleInstruction(errWriter, &frame.function.chunk, @intFromPtr(frame.ip) - @intFromPtr(frame.function.chunk.code.items.ptr));
         }
 
-        const instruction: OpCode = @enumFromInt(self.readByte());
+        const instruction: OpCode = @enumFromInt(readByte(frame));
         switch (instruction) {
             .OP_CONSTANT => {
-                const constant = self.readConstant(chunk);
+                const constant = readConstant(frame);
                 self.push(constant);
             },
             .OP_NIL => self.push(Value.nil),
@@ -136,15 +147,15 @@ pub fn run(self: *Self) InterpretError!void {
             .OP_FALSE => self.push(Value{ .boolean = false }),
             .OP_POP => _ = self.pop(),
             .OP_GET_LOCAL => {
-                const slot = self.readByte();
-                self.push(self.stack[slot]);
+                const slot = readByte(frame);
+                self.push(frame.slots[slot]);
             },
             .OP_SET_LOCAL => {
-                const slot = self.readByte();
-                self.stack[slot] = self.peek(0);
+                const slot = readByte(frame);
+                frame.slots[slot] = self.peek(0);
             },
             .OP_GET_GLOBAL => {
-                const name: *ObjString = self.readString(chunk);
+                const name: *ObjString = readString(frame);
                 const value = self.globals.get(name);
                 if (value) |v| {
                     self.push(v);
@@ -154,12 +165,12 @@ pub fn run(self: *Self) InterpretError!void {
                 }
             },
             .OP_DEFINE_GLOBAL => {
-                const name = self.readString(chunk);
+                const name = readString(frame);
                 _ = try self.globals.set(name, self.peek(0));
                 _ = self.pop();
             },
             .OP_SET_GLOBAL => {
-                const name = self.readString(chunk);
+                const name = readString(frame);
                 if (try self.globals.set(name, self.peek(0))) {
                     _ = self.globals.delete(name);
                     try self.runtimeError("Undefined variable '{s}'.", .{name.string});
@@ -243,16 +254,16 @@ pub fn run(self: *Self) InterpretError!void {
                 try writer.print("\n", .{});
             },
             .OP_JUMP => {
-                const offset = self.readShort();
-                self.ip += offset;
+                const offset = readShort(frame);
+                frame.ip += offset;
             },
             .OP_JUMP_IF_FALSE => {
-                const offset = self.readShort();
-                if (isFalsey(self.peek(0))) self.ip += offset;
+                const offset = readShort(frame);
+                if (isFalsey(self.peek(0))) frame.ip += offset;
             },
             .OP_LOOP => {
-                const offset = self.readShort();
-                self.ip -= offset;
+                const offset = readShort(frame);
+                frame.ip -= offset;
             },
             .OP_RETURN => {
                 // Exit interpreter.
@@ -266,24 +277,24 @@ pub fn run(self: *Self) InterpretError!void {
     }
 }
 
-inline fn readByte(self: *Self) u8 {
-    const byte: u8 = self.ip[0];
-    self.ip += 1;
+inline fn readByte(frame: *CallFrame) u8 {
+    const byte: u8 = frame.ip[0];
+    frame.ip += 1;
     return byte;
 }
 
-inline fn readShort(self: *Self) u16 {
-    const short: u16 = @as(u16, self.ip[0]) << 8 | self.ip[1];
-    self.ip += 2;
+inline fn readShort(frame: *CallFrame) u16 {
+    const short: u16 = @as(u16, frame.ip[0]) << 8 | frame.ip[1];
+    frame.ip += 2;
     return short;
 }
 
-fn readConstant(self: *Self, chunk: *Chunk) Value {
-    return chunk.constants.values.items[self.readByte()];
+fn readConstant(frame: *CallFrame) Value {
+    return frame.function.chunk.constants.values.items[readByte(frame)];
 }
 
-fn readString(self: *Self, chunk: *Chunk) *ObjString {
-    return self.readConstant(chunk).obj.string();
+fn readString(frame: *CallFrame) *ObjString {
+    return readConstant(frame).obj.string();
 }
 
 fn concatenate(self: *Self) !void {

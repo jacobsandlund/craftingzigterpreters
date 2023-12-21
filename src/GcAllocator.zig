@@ -1,6 +1,7 @@
 const std = @import("std");
 const Obj = @import("object.zig").Obj;
 const ObjString = @import("object.zig").ObjString;
+const ObjFunction = @import("object.zig").ObjFunction;
 const Table = @import("table.zig");
 const Value = @import("value.zig").Value;
 
@@ -44,6 +45,12 @@ pub fn createString(self: *Self) !*ObjString {
     const string = try self.backingAllocator.create(ObjString);
     self.trackObject(&string.obj);
     return string;
+}
+
+pub fn createFunction(self: *Self) !*ObjFunction {
+    const function = try self.backingAllocator.create(ObjFunction);
+    self.trackObject(&function.obj);
+    return function;
 }
 
 pub fn findString(self: *Self, slice: []const u8, hash: u32) ?*ObjString {

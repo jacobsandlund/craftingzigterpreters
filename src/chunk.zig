@@ -47,7 +47,7 @@ pub fn init(allocator: Allocator) Self {
     };
 }
 
-pub fn deinit(self: Self) void {
+pub fn deinit(self: *Self) void {
     self.code.deinit();
     self.lines.deinit();
     self.constants.deinit();

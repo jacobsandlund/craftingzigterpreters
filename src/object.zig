@@ -47,7 +47,7 @@ pub const Obj = struct {
 
 pub const ObjFunction = struct {
     obj: Obj,
-    arity: isize,
+    arity: usize,
     chunk: Chunk,
     name: ?*ObjString,
 

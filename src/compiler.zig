@@ -2,7 +2,7 @@ const std = @import("std");
 const Chunk = @import("chunk.zig");
 const Value = @import("value.zig").Value;
 const DEBUG_PRINT_CODE = @import("common.zig").DEBUG_PRINT_CODE;
-const dissassembleChunk = @import("debug.zig").dissassembleChunk;
+const disassembleChunk = @import("debug.zig").disassembleChunk;
 const ObjString = @import("object.zig").ObjString;
 const ObjFunction = @import("object.zig").ObjFunction;
 const GcAllocator = @import("GcAllocator.zig");
@@ -55,6 +55,7 @@ const FunctionType = enum {
 };
 
 const Compiler = struct {
+    enclosing: *Compiler,
     function: *ObjFunction,
     type: FunctionType,
 
@@ -65,16 +66,23 @@ const Compiler = struct {
     const Self = @This();
 
     fn init(allocator_: *GcAllocator, functionType: FunctionType) !Self {
-        var compiler: Self = .{
+        return .{
+            .enclosing = current,
             .function = try ObjFunction.create(allocator_),
             .type = functionType,
             .locals = undefined,
         };
-        var local = &compiler.locals[0];
-        compiler.localCount += 1;
+    }
+
+    fn start(self: *Self, allocator_: *GcAllocator) !void {
+        current = self;
+        if (self.type != .TYPE_SCRIPT) {
+            self.function.name = try ObjString.copyString(allocator_, parser.previous.slice);
+        }
+        var local = &self.locals[0];
+        self.localCount += 1;
         local.depth = 0;
         local.name.slice = "";
-        return compiler;
     }
 
     fn resolveLocal(self: *Self, name: *const Token) isize {
@@ -105,7 +113,7 @@ fn currentChunk() *Chunk {
 const rules = blk: {
     var r: std.EnumArray(Token.Type, ParseRule) = undefined;
 
-    r.set(.TOKEN_LEFT_PAREN, .{ .prefix = grouping, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_LEFT_PAREN, .{ .prefix = grouping, .infix = call, .precedence = Precedence.PREC_CALL });
     r.set(.TOKEN_RIGHT_PAREN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_LEFT_BRACE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_RIGHT_BRACE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
@@ -153,7 +161,7 @@ pub fn compile(allocator_: *GcAllocator, source: []const u8) !?*ObjFunction {
     scanner = Scanner.init(source);
     allocator = allocator_;
     var compiler = try Compiler.init(allocator, .TYPE_SCRIPT);
-    current = &compiler;
+    try compiler.start(allocator);
 
     parser.hadError = false;
     parser.panicMode = false;
@@ -164,8 +172,8 @@ pub fn compile(allocator_: *GcAllocator, source: []const u8) !?*ObjFunction {
         try declaration();
     }
 
-    const function = try endCompiler();
-    return if (parser.hadError) null else function;
+    const function_ = try endCompiler();
+    return if (parser.hadError) null else function_;
 }
 
 fn errorAtCurrent(message: []const u8) void {
@@ -299,17 +307,20 @@ fn makeConstant(value: Value) u8 {
     return @intCast(constant);
 }
 
-fn endCompiler() !*ObjFunction {
+fn endCompiler() ParseError!*ObjFunction {
     try emitReturn();
-    const function = current.function;
+    const function_ = current.function;
 
     if (DEBUG_PRINT_CODE) {
         if (!parser.hadError) {
-            _ = try dissassembleChunk(currentChunk(), if (function.name) |name| name.string else "<script>");
+            _ = disassembleChunk(currentChunk(), if (function_.name) |name| name.string else "<script>") catch |err| {
+                std.debug.panic("Got error disassembling chunk: {}\n", .{err});
+            };
         }
     }
 
-    return function;
+    current = current.enclosing;
+    return function_;
 }
 
 fn beginScope() void {
@@ -353,13 +364,23 @@ fn expression() ParseError!void {
 }
 
 fn declaration() ParseError!void {
-    if (match(.TOKEN_VAR)) {
+    if (match(.TOKEN_FUN)) {
+        try funDeclaration();
+    } else if (match(.TOKEN_VAR)) {
         try varDeclaration();
     } else {
         try statement();
     }
 
     if (parser.panicMode) synchronize();
+}
+
+fn funDeclaration() ParseError!void {
+    std.debug.print("Parsing fun\n", .{});
+    const global = try parseVariable("Expect function name.");
+    markInitialized();
+    try function(.TYPE_FUNCTION);
+    try defineVariable(global);
 }
 
 fn varDeclaration() ParseError!void {
@@ -440,6 +461,32 @@ fn declareVariable() void {
     addLocal(name.*);
 }
 
+fn function(functionType: FunctionType) ParseError!void {
+    var compiler = try Compiler.init(allocator, functionType);
+    try compiler.start(allocator);
+    beginScope();
+
+    consume(.TOKEN_LEFT_PAREN, "Expect '(' after function name.");
+    if (!check(.TOKEN_RIGHT_PAREN)) {
+        while (true) {
+            current.function.arity += 1;
+            if (current.function.arity > std.math.maxInt(u8)) {
+                errorAtCurrent("Can't have more than 255 parameters.");
+            }
+            const constant = try parseVariable("Expect parameter name.");
+            try defineVariable(constant);
+
+            if (!match(.TOKEN_COMMA)) break;
+        }
+    }
+    consume(.TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+    consume(.TOKEN_LEFT_BRACE, "Expect '{' before function body.");
+    try block();
+
+    const function_ = try endCompiler();
+    try emitOpCodeWithByte(.OP_CONSTANT, makeConstant(Value{ .obj = &function_.obj }));
+}
+
 fn identifiersEqual(a: *const Token, b: *const Token) bool {
     return std.mem.eql(u8, a.slice, b.slice);
 }
@@ -466,7 +513,24 @@ fn defineVariable(global: u8) !void {
 }
 
 fn markInitialized() void {
+    if (current.scopeDepth == 0) return;
     current.locals[current.localCount - 1].depth = current.scopeDepth;
+}
+
+fn argumentList() ParseError!u8 {
+    var argCount: usize = 0;
+    if (!check(.TOKEN_RIGHT_PAREN)) {
+        while (true) {
+            try expression();
+            argCount += 1;
+            if (argCount == std.math.maxInt(u8)) {
+                error_("Can't have more than 255 arguments.");
+            }
+            if (!match(.TOKEN_COMMA)) break;
+        }
+    }
+    consume(.TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
+    return @intCast(argCount);
 }
 
 fn printStatement() ParseError!void {
@@ -570,6 +634,11 @@ fn expressionStatement() ParseError!void {
 fn grouping(_: bool) ParseError!void {
     try expression();
     consume(.TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
+}
+
+fn call(_: bool) ParseError!void {
+    const argCount = try argumentList();
+    try emitOpCodeWithByte(.OP_CALL, argCount);
 }
 
 fn unary(_: bool) ParseError!void {

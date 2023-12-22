@@ -4,7 +4,7 @@ const Chunk = @import("chunk.zig");
 const Writer = std.fs.File.Writer;
 const OpCode = Chunk.OpCode;
 
-pub fn dissassembleChunk(chunk: *Chunk, name: []const u8) !void {
+pub fn disassembleChunk(chunk: *Chunk, name: []const u8) !void {
     const stderr = std.io.getStdErr();
     const writer = stderr.writer();
     try writer.print("== {s} ==\n", .{name});
@@ -94,6 +94,9 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         },
         .OP_LOOP => {
             return try jumpInstruction(writer, "OP_LOOP", -1, chunk, offset);
+        },
+        .OP_CALL => {
+            return try byteInstruction(writer, "OP_CALL", chunk, offset);
         },
         .OP_RETURN => {
             return try simpleInstruction(writer, "OP_RETURN", offset);

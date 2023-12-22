@@ -102,11 +102,7 @@ pub fn interpret(self: *Self, source: []const u8) InterpretError!void {
     if (function) |f| {
         self.resetStack();
         self.push(Value{ .obj = &f.obj });
-        var frame = &self.frames[self.frameCount];
-        self.frameCount += 1;
-        frame.function = f;
-        frame.ip = f.chunk.code.items.ptr;
-        frame.slots = @ptrCast(&self.stack);
+        _ = try self.call(f, 0);
 
         return self.run();
     } else {
@@ -265,6 +261,13 @@ pub fn run(self: *Self) InterpretError!void {
                 const offset = readShort(frame);
                 frame.ip -= offset;
             },
+            .OP_CALL => {
+                const argCount = readByte(frame);
+                if (!try self.callValue(self.peek(argCount), argCount)) {
+                    return InterpretError.RuntimeError;
+                }
+                frame = &self.frames[self.frameCount - 1];
+            },
             .OP_RETURN => {
                 // Exit interpreter.
                 return;
@@ -295,6 +298,26 @@ fn readConstant(frame: *CallFrame) Value {
 
 fn readString(frame: *CallFrame) *ObjString {
     return readConstant(frame).obj.string();
+}
+
+fn callValue(self: *Self, callee: Value, argCount: usize) !bool {
+    if (callee == Value.obj) {
+        switch (callee.obj.type) {
+            .OBJ_FUNCTION => return self.call(callee.obj.function(), argCount),
+            else => {}, // pass
+        }
+    }
+    try self.runtimeError("Can only call functions and classes.", .{});
+    return false;
+}
+
+fn call(self: *Self, function_: *ObjFunction, argCount: usize) !bool {
+    var frame: *CallFrame = &self.frames[self.frameCount];
+    self.frameCount += 1;
+    frame.function = function_;
+    frame.ip = function_.chunk.code.items.ptr;
+    frame.slots = self.stackTop - argCount - 1;
+    return true;
 }
 
 fn concatenate(self: *Self) !void {

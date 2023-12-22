@@ -195,7 +195,7 @@ fn identifierType(self: Self) Token.Type {
                 switch (self.start[1]) {
                     'a' => return self.checkKeyword(2, "lse", .TOKEN_FALSE),
                     'o' => return self.checkKeyword(2, "r", .TOKEN_FOR),
-                    'u' => return self.checkKeyword(2, "1", .TOKEN_FUN),
+                    'u' => return self.checkKeyword(2, "n", .TOKEN_FUN),
                     else => return .TOKEN_IDENTIFIER,
                 }
             } else return .TOKEN_IDENTIFIER;

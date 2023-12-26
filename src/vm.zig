@@ -279,8 +279,16 @@ pub fn run(self: *Self) InterpretError!void {
                 frame = &self.frames[self.frameCount - 1];
             },
             .OP_RETURN => {
-                // Exit interpreter.
-                return;
+                const result = self.pop();
+                self.frameCount -= 1;
+                if (self.frameCount == 0) {
+                    _ = self.pop();
+                    return;
+                }
+
+                self.stackTop = frame.slots;
+                self.push(result);
+                frame = &self.frames[self.frameCount - 1];
             },
             _ => {
                 try errWriter.print("Unknown opcode {d:4}\n", .{instruction});

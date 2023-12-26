@@ -257,6 +257,7 @@ fn emitOpCodeWithByte(opCode: OpCode, byte: u8) ParseError!void {
 }
 
 fn emitReturn() ParseError!void {
+    try emitOpCode(.OP_NIL);
     try emitOpCode(.OP_RETURN);
 }
 
@@ -402,6 +403,8 @@ fn statement() ParseError!void {
         try forStatment();
     } else if (match(.TOKEN_IF)) {
         try ifStatement();
+    } else if (match(.TOKEN_RETURN)) {
+        try returnStatement();
     } else if (match(.TOKEN_WHILE)) {
         try whileStatement();
     } else if (match(.TOKEN_LEFT_BRACE)) {
@@ -599,6 +602,20 @@ fn ifStatement() ParseError!void {
 
     if (match(.TOKEN_ELSE)) try statement();
     patchJump(elseJump);
+}
+
+fn returnStatement() ParseError!void {
+    if (current.type == .TYPE_SCRIPT) {
+        error_("Can't return from top-level code.");
+    }
+
+    if (match(.TOKEN_SEMICOLON)) {
+        try emitReturn();
+    } else {
+        try expression();
+        consume(.TOKEN_SEMICOLON, "Expect ';' after return value.");
+        try emitOpCode(.OP_RETURN);
+    }
 }
 
 fn whileStatement() ParseError!void {

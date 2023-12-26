@@ -3,6 +3,7 @@ const debug = @import("debug.zig");
 const Vm = @import("vm.zig");
 
 const panic = std.debug.panic;
+const fs = std.fs;
 
 pub fn main() !void {
     const stderr = std.io.getStdErr();
@@ -27,9 +28,8 @@ pub fn main() !void {
     var hasPath = false;
     var path: []const u8 = undefined;
     if (args.next()) |next| {
-        path = try allocator.dupe(u8, next);
+        path = try fs.cwd().realpathAlloc(allocator, next);
         hasPath = true;
-        defer allocator.free(path);
     }
 
     if (args.skip()) {
@@ -42,6 +42,7 @@ pub fn main() !void {
 
     if (hasPath) {
         try runFile(&vm, allocator, path);
+        allocator.free(path);
     } else {
         try repl(&vm);
     }
@@ -61,7 +62,7 @@ fn repl(vm: *Vm) !void {
 
         if (try nextLine(reader.any(), &line)) |input| {
             vm.interpret(input) catch |err| {
-                try errWriter.print("Got InterpretError: {!}", .{err});
+                try errWriter.print("Got InterpretError: {!}\n", .{err});
             };
         } else {
             return;
@@ -97,21 +98,23 @@ fn runFile(vm: *Vm, allocator: std.mem.Allocator, path: []const u8) !void {
     const stderr = std.io.getStdErr();
     const errWriter = stderr.writer();
 
+    std.debug.print("runFile\n", .{});
     const source = try readFile(allocator, path);
     defer allocator.free(source);
 
+    std.debug.print("interpret\n", .{});
     vm.interpret(source) catch |err| {
         switch (err) {
             error.CompileError => {
-                try errWriter.print("Got CompileError!", .{});
+                try errWriter.print("Got CompileError!\n", .{});
                 std.process.exit(65);
             },
             error.RuntimeError => {
-                try errWriter.print("Got RuntimeError!", .{});
+                try errWriter.print("Got RuntimeError!\n", .{});
                 std.process.exit(70);
             },
             else => {
-                try errWriter.print("Got WriteError: {!}", .{err});
+                try errWriter.print("Got WriteError: {!}\n", .{err});
                 std.process.exit(75);
             },
         }
@@ -121,7 +124,7 @@ fn runFile(vm: *Vm, allocator: std.mem.Allocator, path: []const u8) !void {
 const MaxFileBytes = (1 << 10) << 10; // 1 Mb
 
 fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
-    const file = try std.fs.openFileAbsolute(path, .{});
+    const file = try fs.openFileAbsolute(path, .{});
     defer file.close();
 
     return file.readToEndAlloc(allocator, MaxFileBytes);

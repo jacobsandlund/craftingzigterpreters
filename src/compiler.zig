@@ -376,7 +376,6 @@ fn declaration() ParseError!void {
 }
 
 fn funDeclaration() ParseError!void {
-    std.debug.print("Parsing fun\n", .{});
     const global = try parseVariable("Expect function name.");
     markInitialized();
     try function(.TYPE_FUNCTION);

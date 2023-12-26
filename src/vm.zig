@@ -63,11 +63,21 @@ fn runtimeError(self: *Self, comptime fmt: []const u8, args: anytype) !void {
     const errWriter = stderr.writer();
 
     try errWriter.print(fmt, args);
+    try errWriter.print("\n", .{});
 
-    const frame = &self.frames[self.frameCount - 1];
-    const instruction = @intFromPtr(frame.ip) - @intFromPtr(frame.function.chunk.code.items.ptr) - 1;
-    const line = frame.function.chunk.lines.items[instruction];
-    try errWriter.print("[line {d}] in script\n", .{line});
+    var i = @as(isize, @intCast(self.frameCount)) - 1;
+    while (i >= 0) : (i -= 1) {
+        const frame = &self.frames[@intCast(i)];
+        const function_ = frame.function;
+        const instruction = @intFromPtr(frame.ip) - @intFromPtr(frame.function.chunk.code.items.ptr) - 1;
+        try errWriter.print("[line {d}] in ", .{function_.chunk.lines.items[instruction]});
+        if (function_.name) |name| {
+            try errWriter.print("{s}()\n", .{name.string});
+        } else {
+            try errWriter.print("script\n", .{});
+        }
+    }
+
     self.resetStack();
 }
 
@@ -312,6 +322,16 @@ fn callValue(self: *Self, callee: Value, argCount: usize) !bool {
 }
 
 fn call(self: *Self, function_: *ObjFunction, argCount: usize) !bool {
+    if (argCount != function_.arity) {
+        try self.runtimeError("Expected {d} arguments but got {d}", .{ function_.arity, argCount });
+        return false;
+    }
+
+    if (self.frameCount == FRAMES_MAX) {
+        try self.runtimeError("Stack overflow.", .{});
+        return false;
+    }
+
     var frame: *CallFrame = &self.frames[self.frameCount];
     self.frameCount += 1;
     frame.function = function_;

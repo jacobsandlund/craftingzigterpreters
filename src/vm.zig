@@ -10,8 +10,10 @@ const Table = @import("table.zig");
 
 const OpCode = Chunk.OpCode;
 const Obj = object.Obj;
-const ObjString = object.ObjString;
 const ObjFunction = object.ObjFunction;
+const ObjNative = object.ObjNative;
+const ObjString = object.ObjString;
+const NativeFn = object.NativeFn;
 
 const FRAMES_MAX = 64;
 const STACK_MAX = FRAMES_MAX * (std.math.maxInt(u8) + 1);
@@ -36,7 +38,7 @@ pub const InterpretError = error{
     RuntimeError,
 } || std.fs.File.WriteError || std.mem.Allocator.Error;
 
-pub fn init(allocator: std.mem.Allocator) Self {
+pub fn init(allocator: std.mem.Allocator) !Self {
     var gcAllocator = GcAllocator.init(allocator);
     return Self{
         .allocator = gcAllocator,
@@ -48,9 +50,34 @@ pub fn init(allocator: std.mem.Allocator) Self {
     };
 }
 
+// TODO: what's the Zig way to have this happen in init?
+pub fn setup(self: *Self) !void {
+    self.resetStack();
+    try self.defineNative("clock", clockNative);
+    try self.defineNative("countArgs", countArgsNative);
+}
+
+fn reset(self: *Self) void {
+    self.resetStack();
+    startNanoTimestamp = std.time.nanoTimestamp();
+}
+
 pub fn deinit(self: *Self) void {
     self.globals.deinit();
     self.allocator.deinit();
+}
+
+const nanosecondsPerSecond = 1000_000_000.0;
+var startNanoTimestamp: i128 = undefined;
+
+fn clockNative(_: []Value) Value {
+    const now = std.time.nanoTimestamp();
+    const delta = now - startNanoTimestamp;
+    return .{ .number = @as(f64, @floatFromInt(delta)) / nanosecondsPerSecond };
+}
+
+fn countArgsNative(args: []Value) Value {
+    return .{ .number = @floatFromInt(args.len) };
 }
 
 fn resetStack(self: *Self) void {
@@ -68,10 +95,10 @@ fn runtimeError(self: *Self, comptime fmt: []const u8, args: anytype) !void {
     var i = @as(isize, @intCast(self.frameCount)) - 1;
     while (i >= 0) : (i -= 1) {
         const frame = &self.frames[@intCast(i)];
-        const function_ = frame.function;
+        const function = frame.function;
         const instruction = @intFromPtr(frame.ip) - @intFromPtr(frame.function.chunk.code.items.ptr) - 1;
-        try errWriter.print("[line {d}] in ", .{function_.chunk.lines.items[instruction]});
-        if (function_.name) |name| {
+        try errWriter.print("[line {d}] in ", .{function.chunk.lines.items[instruction]});
+        if (function.name) |name| {
             try errWriter.print("{s}()\n", .{name.string});
         } else {
             try errWriter.print("script\n", .{});
@@ -95,6 +122,14 @@ fn peek(self: Self, distance: usize) Value {
     return (self.stackTop - 1 - distance)[0];
 }
 
+fn defineNative(self: *Self, name: []const u8, function: *const NativeFn) !void {
+    self.push(Value{ .obj = &(try ObjString.copyString(&self.allocator, name)).obj });
+    self.push(Value{ .obj = &(try ObjNative.create(&self.allocator, function)).obj });
+    _ = try self.globals.set(self.stack[0].obj.string(), self.stack[1]);
+    _ = self.pop();
+    _ = self.pop();
+}
+
 fn isFalsey(value: Value) bool {
     return value == Value.nil or (value == Value.boolean and !value.boolean);
 }
@@ -110,7 +145,7 @@ pub fn interpret(self: *Self, source: []const u8) InterpretError!void {
     };
 
     if (function) |f| {
-        self.resetStack();
+        self.reset();
         self.push(Value{ .obj = &f.obj });
         _ = try self.call(f, 0);
 
@@ -120,7 +155,7 @@ pub fn interpret(self: *Self, source: []const u8) InterpretError!void {
     }
 }
 
-pub fn run(self: *Self) InterpretError!void {
+fn run(self: *Self) InterpretError!void {
     const stdout = std.io.getStdOut();
     const stderr = std.io.getStdErr();
     const writer = stdout.writer();
@@ -322,6 +357,13 @@ fn callValue(self: *Self, callee: Value, argCount: usize) !bool {
     if (callee == Value.obj) {
         switch (callee.obj.type) {
             .OBJ_FUNCTION => return self.call(callee.obj.function(), argCount),
+            .OBJ_NATIVE => {
+                const native = callee.obj.native().function;
+                const result = native((self.stackTop - argCount)[0..argCount]);
+                self.stackTop -= argCount + 1;
+                self.push(result);
+                return true;
+            },
             else => {}, // pass
         }
     }
@@ -329,9 +371,9 @@ fn callValue(self: *Self, callee: Value, argCount: usize) !bool {
     return false;
 }
 
-fn call(self: *Self, function_: *ObjFunction, argCount: usize) !bool {
-    if (argCount != function_.arity) {
-        try self.runtimeError("Expected {d} arguments but got {d}", .{ function_.arity, argCount });
+fn call(self: *Self, function: *ObjFunction, argCount: usize) !bool {
+    if (argCount != function.arity) {
+        try self.runtimeError("Expected {d} arguments but got {d}", .{ function.arity, argCount });
         return false;
     }
 
@@ -342,8 +384,8 @@ fn call(self: *Self, function_: *ObjFunction, argCount: usize) !bool {
 
     var frame: *CallFrame = &self.frames[self.frameCount];
     self.frameCount += 1;
-    frame.function = function_;
-    frame.ip = function_.chunk.code.items.ptr;
+    frame.function = function;
+    frame.ip = function.chunk.code.items.ptr;
     frame.slots = self.stackTop - argCount - 1;
     return true;
 }

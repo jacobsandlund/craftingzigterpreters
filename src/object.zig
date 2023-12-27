@@ -1,6 +1,7 @@
 const std = @import("std");
 const GcAllocator = @import("GcAllocator.zig");
 const Chunk = @import("chunk.zig");
+const Value = @import("value.zig").Value;
 
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
@@ -10,36 +11,46 @@ pub const Obj = struct {
     next: ?*Obj = null,
 
     pub const Type = enum {
-        OBJ_STRING,
         OBJ_FUNCTION,
+        OBJ_NATIVE,
+        OBJ_STRING,
     };
-
-    pub fn string(self: *Obj) *ObjString {
-        return @fieldParentPtr(ObjString, "obj", self);
-    }
 
     pub fn function(self: *Obj) *ObjFunction {
         return @fieldParentPtr(ObjFunction, "obj", self);
     }
 
+    pub fn native(self: *Obj) *ObjNative {
+        return @fieldParentPtr(ObjNative, "obj", self);
+    }
+
+    pub fn string(self: *Obj) *ObjString {
+        return @fieldParentPtr(ObjString, "obj", self);
+    }
+
     pub fn printObject(self: *Obj, writer: std.fs.File.Writer) !void {
         switch (self.type) {
-            .OBJ_STRING => try self.string().print(writer),
             .OBJ_FUNCTION => try self.function().print(writer),
+            .OBJ_NATIVE => try self.native().print(writer),
+            .OBJ_STRING => try self.string().print(writer),
         }
     }
 
     pub fn destroyWithAllocator(self: *Obj, allocator: Allocator) void {
         switch (self.type) {
-            .OBJ_STRING => {
-                const s = self.string();
-                s.deinitWithAllocator(allocator);
-                allocator.destroy(s);
-            },
             .OBJ_FUNCTION => {
                 const f = self.function();
                 f.deinitWithAllocator(allocator);
                 allocator.destroy(f);
+            },
+            .OBJ_NATIVE => {
+                const n = self.native();
+                allocator.destroy(n);
+            },
+            .OBJ_STRING => {
+                const s = self.string();
+                s.deinitWithAllocator(allocator);
+                allocator.destroy(s);
             },
         }
     }
@@ -70,6 +81,24 @@ pub const ObjFunction = struct {
         } else {
             try writer.print("<script>", .{});
         }
+    }
+};
+
+pub const NativeFn = fn (args: []Value) Value;
+
+pub const ObjNative = struct {
+    obj: Obj,
+    function: *const NativeFn,
+
+    pub fn create(allocator: *GcAllocator, function: *const NativeFn) !*ObjNative {
+        const native = try allocator.createNative();
+        native.obj.type = Obj.Type.OBJ_NATIVE;
+        native.function = function;
+        return native;
+    }
+
+    pub fn print(_: ObjNative, writer: std.fs.File.Writer) !void {
+        try writer.print("<native fn>", .{});
     }
 };
 

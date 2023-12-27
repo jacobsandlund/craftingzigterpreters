@@ -37,7 +37,8 @@ pub fn main() !void {
         std.process.exit(64);
     }
 
-    var vm = Vm.init(allocator);
+    var vm = try Vm.init(allocator);
+    try vm.setup();
     defer vm.deinit();
 
     if (hasPath) {
@@ -98,11 +99,9 @@ fn runFile(vm: *Vm, allocator: std.mem.Allocator, path: []const u8) !void {
     const stderr = std.io.getStdErr();
     const errWriter = stderr.writer();
 
-    std.debug.print("runFile\n", .{});
     const source = try readFile(allocator, path);
     defer allocator.free(source);
 
-    std.debug.print("interpret\n", .{});
     vm.interpret(source) catch |err| {
         switch (err) {
             error.CompileError => {

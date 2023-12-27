@@ -1,11 +1,13 @@
 const std = @import("std");
-const Obj = @import("object.zig").Obj;
-const ObjString = @import("object.zig").ObjString;
-const ObjFunction = @import("object.zig").ObjFunction;
+const object = @import("object.zig");
 const Table = @import("table.zig");
 const Value = @import("value.zig").Value;
 
 const Allocator = std.mem.Allocator;
+const Obj = object.Obj;
+const ObjFunction = object.ObjFunction;
+const ObjNative = object.ObjNative;
+const ObjString = object.ObjString;
 
 backingAllocator: Allocator,
 objects: ?*Obj,
@@ -26,11 +28,11 @@ pub fn allocator(self: *Self) Allocator {
 }
 
 pub fn deinit(self: *Self) void {
-    var object: ?*Obj = self.objects;
-    while (object) |obj| {
-        const next: ?*Obj = obj.next;
-        obj.destroyWithAllocator(self.backingAllocator);
-        object = next;
+    var obj: ?*Obj = self.objects;
+    while (obj) |o| {
+        const next: ?*Obj = o.next;
+        o.destroyWithAllocator(self.backingAllocator);
+        obj = next;
     }
 
     self.strings.deinit();
@@ -41,16 +43,22 @@ fn trackObject(self: *Self, obj: *Obj) void {
     self.objects = obj;
 }
 
-pub fn createString(self: *Self) !*ObjString {
-    const string = try self.backingAllocator.create(ObjString);
-    self.trackObject(&string.obj);
-    return string;
-}
-
 pub fn createFunction(self: *Self) !*ObjFunction {
     const function = try self.backingAllocator.create(ObjFunction);
     self.trackObject(&function.obj);
     return function;
+}
+
+pub fn createNative(self: *Self) !*ObjNative {
+    const native = try self.backingAllocator.create(ObjNative);
+    self.trackObject(&native.obj);
+    return native;
+}
+
+pub fn createString(self: *Self) !*ObjString {
+    const string = try self.backingAllocator.create(ObjString);
+    self.trackObject(&string.obj);
+    return string;
 }
 
 pub fn findString(self: *Self, slice: []const u8, hash: u32) ?*ObjString {

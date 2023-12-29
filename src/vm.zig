@@ -10,9 +10,11 @@ const Table = @import("table.zig");
 
 const OpCode = Chunk.OpCode;
 const Obj = object.Obj;
+const ObjClosure = object.ObjClosure;
 const ObjFunction = object.ObjFunction;
 const ObjNative = object.ObjNative;
 const ObjString = object.ObjString;
+const ObjUpvalue = object.ObjUpvalue;
 const NativeFn = object.NativeFn;
 
 const FRAMES_MAX = 64;
@@ -26,7 +28,7 @@ stackTop: [*]Value,
 globals: Table,
 
 const CallFrame = struct {
-    function: *ObjFunction,
+    closure: *ObjClosure,
     ip: [*]u8,
     slots: [*]Value,
 };
@@ -95,8 +97,8 @@ fn runtimeError(self: *Self, comptime fmt: []const u8, args: anytype) !void {
     var i = @as(isize, @intCast(self.frameCount)) - 1;
     while (i >= 0) : (i -= 1) {
         const frame = &self.frames[@intCast(i)];
-        const function = frame.function;
-        const instruction = @intFromPtr(frame.ip) - @intFromPtr(frame.function.chunk.code.items.ptr) - 1;
+        const function = frame.closure.function;
+        const instruction = @intFromPtr(frame.ip) - @intFromPtr(frame.closure.function.chunk.code.items.ptr) - 1;
         try errWriter.print("[line {d}] in ", .{function.chunk.lines.items[instruction]});
         if (function.name) |name| {
             try errWriter.print("{s}()\n", .{name.string});
@@ -147,7 +149,10 @@ pub fn interpret(self: *Self, source: []const u8) InterpretError!void {
     if (function) |f| {
         self.reset();
         self.push(Value{ .obj = &f.obj });
-        _ = try self.call(f, 0);
+        const closure = try ObjClosure.create(&self.allocator, f);
+        _ = self.pop();
+        self.push(Value{ .obj = &closure.obj });
+        _ = try self.call(closure, 0);
 
         return self.run();
     } else {
@@ -174,7 +179,7 @@ fn run(self: *Self) InterpretError!void {
             }
             try errWriter.print("\n", .{});
 
-            _ = try disassembleInstruction(errWriter, &frame.function.chunk, @intFromPtr(frame.ip) - @intFromPtr(frame.function.chunk.code.items.ptr));
+            _ = try disassembleInstruction(errWriter, &frame.closure.function.chunk, @intFromPtr(frame.ip) - @intFromPtr(frame.closure.function.chunk.code.items.ptr));
         }
 
         const instruction: OpCode = @enumFromInt(readByte(frame));
@@ -217,6 +222,14 @@ fn run(self: *Self) InterpretError!void {
                     try self.runtimeError("Undefined variable '{s}'.", .{name.string});
                     return InterpretError.RuntimeError;
                 }
+            },
+            .OP_GET_UPVALUE => {
+                const slot = readByte(frame);
+                self.push(frame.closure.upvalues[slot].?.location.*);
+            },
+            .OP_SET_UPVALUE => {
+                const slot = readByte(frame);
+                frame.closure.upvalues[slot].?.location.* = self.peek(0);
             },
             .OP_EQUAL => {
                 const b = self.pop();
@@ -313,6 +326,20 @@ fn run(self: *Self) InterpretError!void {
                 }
                 frame = &self.frames[self.frameCount - 1];
             },
+            .OP_CLOSURE => {
+                const function = readConstant(frame).obj.function();
+                const closure = try ObjClosure.create(&self.allocator, function);
+                self.push(Value{ .obj = &closure.obj });
+                for (closure.upvalues) |*upvalue| {
+                    const isLocal = readByte(frame) == 1;
+                    const index = readByte(frame);
+                    if (isLocal) {
+                        upvalue.* = try self.captureUpvalue(@ptrCast(frame.slots + index));
+                    } else {
+                        upvalue.* = frame.closure.upvalues[index].?;
+                    }
+                }
+            },
             .OP_RETURN => {
                 const result = self.pop();
                 self.frameCount -= 1;
@@ -346,7 +373,7 @@ inline fn readShort(frame: *CallFrame) u16 {
 }
 
 fn readConstant(frame: *CallFrame) Value {
-    return frame.function.chunk.constants.values.items[readByte(frame)];
+    return frame.closure.function.chunk.constants.values.items[readByte(frame)];
 }
 
 fn readString(frame: *CallFrame) *ObjString {
@@ -356,7 +383,7 @@ fn readString(frame: *CallFrame) *ObjString {
 fn callValue(self: *Self, callee: Value, argCount: usize) !bool {
     if (callee == Value.obj) {
         switch (callee.obj.type) {
-            .OBJ_FUNCTION => return self.call(callee.obj.function(), argCount),
+            .OBJ_CLOSURE => return self.call(callee.obj.closure(), argCount),
             .OBJ_NATIVE => {
                 const native = callee.obj.native().function;
                 const result = native((self.stackTop - argCount)[0..argCount]);
@@ -371,9 +398,9 @@ fn callValue(self: *Self, callee: Value, argCount: usize) !bool {
     return false;
 }
 
-fn call(self: *Self, function: *ObjFunction, argCount: usize) !bool {
-    if (argCount != function.arity) {
-        try self.runtimeError("Expected {d} arguments but got {d}", .{ function.arity, argCount });
+fn call(self: *Self, closure: *ObjClosure, argCount: usize) !bool {
+    if (argCount != closure.function.arity) {
+        try self.runtimeError("Expected {d} arguments but got {d}", .{ closure.function.arity, argCount });
         return false;
     }
 
@@ -384,10 +411,15 @@ fn call(self: *Self, function: *ObjFunction, argCount: usize) !bool {
 
     var frame: *CallFrame = &self.frames[self.frameCount];
     self.frameCount += 1;
-    frame.function = function;
-    frame.ip = function.chunk.code.items.ptr;
+    frame.closure = closure;
+    frame.ip = closure.function.chunk.code.items.ptr;
     frame.slots = self.stackTop - argCount - 1;
     return true;
+}
+
+fn captureUpvalue(self: *Self, local: *Value) !*ObjUpvalue {
+    const createdUpvalue = try ObjUpvalue.create(&self.allocator, local);
+    return createdUpvalue;
 }
 
 fn concatenate(self: *Self) !void {

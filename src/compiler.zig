@@ -49,18 +49,24 @@ const Local = struct {
     depth: isize,
 };
 
+const Upvalue = struct {
+    index: u8,
+    isLocal: bool,
+};
+
 const FunctionType = enum {
     TYPE_FUNCTION,
     TYPE_SCRIPT,
 };
 
 const Compiler = struct {
-    enclosing: *Compiler,
+    enclosing: ?*Compiler,
     function: *ObjFunction,
     type: FunctionType,
 
     locals: [std.math.maxInt(u8) + 1]Local,
     localCount: usize = 0,
+    upvalues: [std.math.maxInt(u8) + 1]Upvalue,
     scopeDepth: isize = 0,
 
     const Self = @This();
@@ -71,6 +77,7 @@ const Compiler = struct {
             .function = try ObjFunction.create(allocator_),
             .type = functionType,
             .locals = undefined,
+            .upvalues = undefined,
         };
     }
 
@@ -86,7 +93,7 @@ const Compiler = struct {
     }
 
     fn resolveLocal(self: *Self, name: *const Token) isize {
-        var i: isize = @as(isize, @intCast(current.localCount)) - 1;
+        var i: isize = @as(isize, @intCast(self.localCount)) - 1;
         while (i >= 0) : (i -= 1) {
             const local = &self.locals[@intCast(i)];
             if (identifiersEqual(name, &local.name)) {
@@ -99,15 +106,52 @@ const Compiler = struct {
 
         return -1;
     }
+
+    fn resolveUpvalue(self: *Self, name: *const Token) isize {
+        if (self.enclosing) |enclosing| {
+            const local = enclosing.resolveLocal(name);
+            if (local != -1) {
+                return self.addUpvalue(@intCast(local), true);
+            }
+
+            const upvalue = enclosing.resolveUpvalue(name);
+            if (upvalue != -1) {
+                return self.addUpvalue(@intCast(upvalue), false);
+            }
+        }
+
+        return -1;
+    }
+
+    fn addUpvalue(self: *Self, index: u8, isLocal: bool) isize {
+        const upvalueCount = self.function.upvalueCount;
+
+        for (0..upvalueCount) |i| {
+            const upvalue = self.upvalues[i];
+            if (upvalue.index == index and upvalue.isLocal == isLocal) {
+                return @intCast(i);
+            }
+        }
+
+        if (upvalueCount == std.math.maxInt(u8) + 1) {
+            error_("Too many closure variables in function.");
+            return 0;
+        }
+
+        self.upvalues[upvalueCount].isLocal = isLocal;
+        self.upvalues[upvalueCount].index = index;
+        self.function.upvalueCount += 1;
+        return @intCast(upvalueCount);
+    }
 };
 
 var parser: Parser = undefined;
-var current: *Compiler = undefined;
+var current: ?*Compiler = null;
 var scanner: Scanner = undefined;
 var allocator: *GcAllocator = undefined;
 
 fn currentChunk() *Chunk {
-    return &current.function.chunk;
+    return &current.?.function.chunk;
 }
 
 const rules = blk: {
@@ -310,7 +354,7 @@ fn makeConstant(value: Value) u8 {
 
 fn endCompiler() ParseError!*ObjFunction {
     try emitReturn();
-    const function_ = current.function;
+    const function_ = current.?.function;
 
     if (DEBUG_PRINT_CODE) {
         if (!parser.hadError) {
@@ -320,20 +364,20 @@ fn endCompiler() ParseError!*ObjFunction {
         }
     }
 
-    current = current.enclosing;
+    current = current.?.enclosing;
     return function_;
 }
 
 fn beginScope() void {
-    current.scopeDepth += 1;
+    current.?.scopeDepth += 1;
 }
 
 fn endScope() ParseError!void {
-    current.scopeDepth -= 1;
+    current.?.scopeDepth -= 1;
 
-    while (current.localCount > 0 and current.locals[current.localCount - 1].depth > current.scopeDepth) {
+    while (current.?.localCount > 0 and current.?.locals[current.?.localCount - 1].depth > current.?.scopeDepth) {
         try emitOpCode(.OP_POP);
-        current.localCount -= 1;
+        current.?.localCount -= 1;
     }
 }
 
@@ -434,7 +478,7 @@ fn parseVariable(errorMessage: []const u8) !u8 {
     consume(.TOKEN_IDENTIFIER, errorMessage);
 
     declareVariable();
-    if (current.scopeDepth > 0) return 0;
+    if (current.?.scopeDepth > 0) return 0;
 
     return identifierConstant(&parser.previous);
 }
@@ -445,13 +489,13 @@ fn identifierConstant(name: *const Token) !u8 {
 }
 
 fn declareVariable() void {
-    if (current.scopeDepth == 0) return;
+    if (current.?.scopeDepth == 0) return;
 
     const name = &parser.previous;
-    var i: isize = @as(isize, @intCast(current.localCount)) - 1;
+    var i: isize = @as(isize, @intCast(current.?.localCount)) - 1;
     while (i >= 0) : (i -= 1) {
-        const local = &current.locals[@intCast(i)];
-        if (local.depth != -1 and local.depth < current.scopeDepth) {
+        const local = &current.?.locals[@intCast(i)];
+        if (local.depth != -1 and local.depth < current.?.scopeDepth) {
             break;
         }
 
@@ -471,8 +515,8 @@ fn function(functionType: FunctionType) ParseError!void {
     consume(.TOKEN_LEFT_PAREN, "Expect '(' after function name.");
     if (!check(.TOKEN_RIGHT_PAREN)) {
         while (true) {
-            current.function.arity += 1;
-            if (current.function.arity > std.math.maxInt(u8)) {
+            current.?.function.arity += 1;
+            if (current.?.function.arity > std.math.maxInt(u8)) {
                 errorAtCurrent("Can't have more than 255 parameters.");
             }
             const constant = try parseVariable("Expect parameter name.");
@@ -486,7 +530,12 @@ fn function(functionType: FunctionType) ParseError!void {
     try block();
 
     const function_ = try endCompiler();
-    try emitOpCodeWithByte(.OP_CONSTANT, makeConstant(Value{ .obj = &function_.obj }));
+    try emitOpCodeWithByte(.OP_CLOSURE, makeConstant(Value{ .obj = &function_.obj }));
+
+    for (0..function_.upvalueCount) |i| {
+        try emitByte(if (compiler.upvalues[i].isLocal) 1 else 0);
+        try emitByte(compiler.upvalues[i].index);
+    }
 }
 
 fn identifiersEqual(a: *const Token, b: *const Token) bool {
@@ -494,19 +543,19 @@ fn identifiersEqual(a: *const Token, b: *const Token) bool {
 }
 
 fn addLocal(name: Token) void {
-    if (current.localCount == current.locals.len) {
+    if (current.?.localCount == current.?.locals.len) {
         error_("Too many local variables in function.");
         return;
     }
 
-    var local: *Local = &current.locals[current.localCount];
-    current.localCount += 1;
+    var local: *Local = &current.?.locals[current.?.localCount];
+    current.?.localCount += 1;
     local.name = name;
     local.depth = -1;
 }
 
 fn defineVariable(global: u8) !void {
-    if (current.scopeDepth > 0) {
+    if (current.?.scopeDepth > 0) {
         markInitialized();
         return;
     }
@@ -515,8 +564,8 @@ fn defineVariable(global: u8) !void {
 }
 
 fn markInitialized() void {
-    if (current.scopeDepth == 0) return;
-    current.locals[current.localCount - 1].depth = current.scopeDepth;
+    if (current.?.scopeDepth == 0) return;
+    current.?.locals[current.?.localCount - 1].depth = current.?.scopeDepth;
 }
 
 fn argumentList() ParseError!u8 {
@@ -605,7 +654,7 @@ fn ifStatement() ParseError!void {
 }
 
 fn returnStatement() ParseError!void {
-    if (current.type == .TYPE_SCRIPT) {
+    if (current.?.type == .TYPE_SCRIPT) {
         error_("Can't return from top-level code.");
     }
 
@@ -774,14 +823,20 @@ fn variable(canAssign: bool) ParseError!void {
 fn namedVariable(name: Token, canAssign: bool) ParseError!void {
     var getOp: OpCode = undefined;
     var setOp: OpCode = undefined;
-    var arg: isize = current.resolveLocal(&name);
+    var arg: isize = current.?.resolveLocal(&name);
     if (arg != -1) {
         getOp = .OP_GET_LOCAL;
         setOp = .OP_SET_LOCAL;
     } else {
-        arg = try identifierConstant(&name);
-        getOp = .OP_GET_GLOBAL;
-        setOp = .OP_SET_GLOBAL;
+        arg = current.?.resolveUpvalue(&name);
+        if (arg != -1) {
+            getOp = .OP_GET_UPVALUE;
+            setOp = .OP_SET_UPVALUE;
+        } else {
+            arg = try identifierConstant(&name);
+            getOp = .OP_GET_GLOBAL;
+            setOp = .OP_SET_GLOBAL;
+        }
     }
 
     if (canAssign and match(.TOKEN_EQUAL)) {

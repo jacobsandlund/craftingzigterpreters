@@ -5,9 +5,11 @@ const Value = @import("value.zig").Value;
 
 const Allocator = std.mem.Allocator;
 const Obj = object.Obj;
+const ObjClosure = object.ObjClosure;
 const ObjFunction = object.ObjFunction;
 const ObjNative = object.ObjNative;
 const ObjString = object.ObjString;
+const ObjUpvalue = object.ObjUpvalue;
 
 backingAllocator: Allocator,
 objects: ?*Obj,
@@ -43,6 +45,12 @@ fn trackObject(self: *Self, obj: *Obj) void {
     self.objects = obj;
 }
 
+pub fn createClosure(self: *Self) !*ObjClosure {
+    const closure = try self.backingAllocator.create(ObjClosure);
+    self.trackObject(&closure.obj);
+    return closure;
+}
+
 pub fn createFunction(self: *Self) !*ObjFunction {
     const function = try self.backingAllocator.create(ObjFunction);
     self.trackObject(&function.obj);
@@ -59,6 +67,12 @@ pub fn createString(self: *Self) !*ObjString {
     const string = try self.backingAllocator.create(ObjString);
     self.trackObject(&string.obj);
     return string;
+}
+
+pub fn createUpvalue(self: *Self) !*ObjUpvalue {
+    const upvalue = try self.backingAllocator.create(ObjUpvalue);
+    self.trackObject(&upvalue.obj);
+    return upvalue;
 }
 
 pub fn findString(self: *Self, slice: []const u8, hash: u32) ?*ObjString {

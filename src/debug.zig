@@ -56,6 +56,12 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         .OP_SET_GLOBAL => {
             return try constantInstruction(writer, "OP_SET_GLOBAL", chunk, offset);
         },
+        .OP_GET_UPVALUE => {
+            return try byteInstruction(writer, "OP_GET_UPVALUE", chunk, offset);
+        },
+        .OP_SET_UPVALUE => {
+            return try byteInstruction(writer, "OP_SET_UPVALUE", chunk, offset);
+        },
         .OP_EQUAL => {
             return try simpleInstruction(writer, "OP_EQUAL", offset);
         },
@@ -97,6 +103,24 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         },
         .OP_CALL => {
             return try byteInstruction(writer, "OP_CALL", chunk, offset);
+        },
+        .OP_CLOSURE => {
+            var i = offset + 1;
+            const constant = chunk.code.items[i];
+            i += 1;
+            try writer.print("{s:<16} {d:4} ", .{ "OP_CLOSURE", constant });
+            const function = chunk.constants.values.items[constant].obj.function();
+            try function.print(writer);
+            try writer.print("\n", .{});
+
+            for (0..function.upvalueCount) |_| {
+                const isLocal = chunk.code.items[i] == 1;
+                const index = chunk.code.items[i + 1];
+                try writer.print("{d:4}      |                     {s} {d}", .{ i, if (isLocal) "local" else "upvalue", index });
+                i += 2;
+            }
+
+            return i;
         },
         .OP_RETURN => {
             return try simpleInstruction(writer, "OP_RETURN", offset);

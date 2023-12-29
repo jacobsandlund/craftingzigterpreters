@@ -11,10 +11,16 @@ pub const Obj = struct {
     next: ?*Obj = null,
 
     pub const Type = enum {
+        OBJ_CLOSURE,
         OBJ_FUNCTION,
         OBJ_NATIVE,
         OBJ_STRING,
+        OBJ_UPVALUE,
     };
+
+    pub fn closure(self: *Obj) *ObjClosure {
+        return @fieldParentPtr(ObjClosure, "obj", self);
+    }
 
     pub fn function(self: *Obj) *ObjFunction {
         return @fieldParentPtr(ObjFunction, "obj", self);
@@ -28,16 +34,27 @@ pub const Obj = struct {
         return @fieldParentPtr(ObjString, "obj", self);
     }
 
+    pub fn upvalue(self: *Obj) *ObjUpvalue {
+        return @fieldParentPtr(ObjUpvalue, "obj", self);
+    }
+
     pub fn printObject(self: *Obj, writer: std.fs.File.Writer) !void {
         switch (self.type) {
+            .OBJ_CLOSURE => try self.closure().print(writer),
             .OBJ_FUNCTION => try self.function().print(writer),
             .OBJ_NATIVE => try self.native().print(writer),
             .OBJ_STRING => try self.string().print(writer),
+            .OBJ_UPVALUE => try self.upvalue().print(writer),
         }
     }
 
     pub fn destroyWithAllocator(self: *Obj, allocator: Allocator) void {
         switch (self.type) {
+            .OBJ_CLOSURE => {
+                const c = self.closure();
+                c.deinitWithAllocator(allocator);
+                allocator.destroy(c);
+            },
             .OBJ_FUNCTION => {
                 const f = self.function();
                 f.deinitWithAllocator(allocator);
@@ -52,13 +69,45 @@ pub const Obj = struct {
                 s.deinitWithAllocator(allocator);
                 allocator.destroy(s);
             },
+            .OBJ_UPVALUE => {
+                const u = self.upvalue();
+                allocator.destroy(u);
+            },
         }
+    }
+};
+
+pub const ObjClosure = struct {
+    obj: Obj,
+    function: *ObjFunction,
+    upvalues: []?*ObjUpvalue,
+
+    pub fn create(allocator: *GcAllocator, function: *ObjFunction) !*ObjClosure {
+        const upvalues = try allocator.allocator().alloc(?*ObjUpvalue, function.upvalueCount);
+        for (0..function.upvalueCount) |i| {
+            upvalues[i] = null;
+        }
+
+        const closure = try allocator.createClosure();
+        closure.obj.type = Obj.Type.OBJ_CLOSURE;
+        closure.function = function;
+        closure.upvalues = upvalues;
+        return closure;
+    }
+
+    pub fn print(self: ObjClosure, writer: std.fs.File.Writer) !void {
+        try self.function.print(writer);
+    }
+
+    pub fn deinitWithAllocator(self: *ObjClosure, allocator: Allocator) void {
+        allocator.free(self.upvalues);
     }
 };
 
 pub const ObjFunction = struct {
     obj: Obj,
     arity: usize,
+    upvalueCount: usize,
     chunk: Chunk,
     name: ?*ObjString,
 
@@ -66,6 +115,7 @@ pub const ObjFunction = struct {
         const function = try allocator.createFunction();
         function.obj.type = Obj.Type.OBJ_FUNCTION;
         function.arity = 0;
+        function.upvalueCount = 0;
         function.name = null;
         function.chunk = Chunk.init(allocator.allocator());
         return function;
@@ -141,6 +191,22 @@ pub const ObjString = struct {
 
     pub fn print(self: ObjString, writer: std.fs.File.Writer) !void {
         try writer.print("{s}", .{self.string});
+    }
+};
+
+pub const ObjUpvalue = struct {
+    obj: Obj,
+    location: *Value,
+
+    pub fn create(allocator: *GcAllocator, slot: *Value) !*ObjUpvalue {
+        const upvalue = try allocator.createUpvalue();
+        upvalue.obj.type = Obj.Type.OBJ_UPVALUE;
+        upvalue.location = slot;
+        return upvalue;
+    }
+
+    pub fn print(_: ObjUpvalue, writer: std.fs.File.Writer) !void {
+        try writer.print("upvalue", .{});
     }
 };
 

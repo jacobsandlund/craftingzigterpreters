@@ -23,6 +23,7 @@ const STACK_MAX = FRAMES_MAX * (std.math.maxInt(u8) + 1);
 allocator: GcAllocator,
 frames: [FRAMES_MAX]CallFrame,
 frameCount: usize,
+openUpvalues: ?*ObjUpvalue,
 stack: [STACK_MAX]Value,
 stackTop: [*]Value,
 globals: Table,
@@ -46,6 +47,7 @@ pub fn init(allocator: std.mem.Allocator) !Self {
         .allocator = gcAllocator,
         .frames = undefined,
         .frameCount = 0,
+        .openUpvalues = null,
         .stack = undefined,
         .stackTop = undefined,
         .globals = Table.init(gcAllocator.allocator()),
@@ -340,8 +342,13 @@ fn run(self: *Self) InterpretError!void {
                     }
                 }
             },
+            .OP_CLOSE_UPVALUE => {
+                self.closeUpvalues(@ptrCast(self.stackTop - 1));
+                _ = self.pop();
+            },
             .OP_RETURN => {
                 const result = self.pop();
+                self.closeUpvalues(@ptrCast(frame.slots));
                 self.frameCount -= 1;
                 if (self.frameCount == 0) {
                     _ = self.pop();
@@ -418,8 +425,36 @@ fn call(self: *Self, closure: *ObjClosure, argCount: usize) !bool {
 }
 
 fn captureUpvalue(self: *Self, local: *Value) !*ObjUpvalue {
+    var prevUpvalue: ?*ObjUpvalue = null;
+    var upvalue: ?*ObjUpvalue = self.openUpvalues;
+    while (upvalue != null and @intFromPtr(upvalue.?.location) > @intFromPtr(local)) {
+        prevUpvalue = upvalue;
+        upvalue = upvalue.?.next;
+    }
+
+    if (upvalue != null and upvalue.?.location == local) {
+        return upvalue.?;
+    }
+
     const createdUpvalue = try ObjUpvalue.create(&self.allocator, local);
+    createdUpvalue.next = prevUpvalue;
+
+    if (prevUpvalue) |prev| {
+        prev.next = createdUpvalue;
+    } else {
+        self.openUpvalues = createdUpvalue;
+    }
+
     return createdUpvalue;
+}
+
+fn closeUpvalues(self: *Self, last: *Value) void {
+    while (self.openUpvalues != null and @intFromPtr(self.openUpvalues.?.location) >= @intFromPtr(last)) {
+        const upvalue = self.openUpvalues.?;
+        upvalue.closed = upvalue.location.*;
+        upvalue.location = &upvalue.closed;
+        self.openUpvalues = upvalue.next;
+    }
 }
 
 fn concatenate(self: *Self) !void {

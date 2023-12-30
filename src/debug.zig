@@ -122,6 +122,9 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
 
             return i;
         },
+        .OP_CLOSE_UPVALUE => {
+            return try simpleInstruction(writer, "OP_CLOSE_UPVALUE", offset);
+        },
         .OP_RETURN => {
             return try simpleInstruction(writer, "OP_RETURN", offset);
         },

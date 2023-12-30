@@ -33,6 +33,7 @@ pub const OpCode = enum(u8) {
     OP_LOOP,
     OP_CALL,
     OP_CLOSURE,
+    OP_CLOSE_UPVALUE,
     OP_RETURN,
     _,
 };

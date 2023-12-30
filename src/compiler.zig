@@ -47,6 +47,7 @@ const ParseRule = struct {
 const Local = struct {
     name: Token,
     depth: isize,
+    isCaptured: bool,
 };
 
 const Upvalue = struct {
@@ -89,6 +90,7 @@ const Compiler = struct {
         var local = &self.locals[0];
         self.localCount += 1;
         local.depth = 0;
+        local.isCaptured = false;
         local.name.slice = "";
     }
 
@@ -111,6 +113,7 @@ const Compiler = struct {
         if (self.enclosing) |enclosing| {
             const local = enclosing.resolveLocal(name);
             if (local != -1) {
+                enclosing.locals[@intCast(local)].isCaptured = true;
                 return self.addUpvalue(@intCast(local), true);
             }
 
@@ -373,11 +376,16 @@ fn beginScope() void {
 }
 
 fn endScope() ParseError!void {
-    current.?.scopeDepth -= 1;
+    const cur = current.?;
+    cur.scopeDepth -= 1;
 
-    while (current.?.localCount > 0 and current.?.locals[current.?.localCount - 1].depth > current.?.scopeDepth) {
-        try emitOpCode(.OP_POP);
-        current.?.localCount -= 1;
+    while (cur.localCount > 0 and cur.locals[cur.localCount - 1].depth > cur.scopeDepth) {
+        if (cur.locals[cur.localCount - 1].isCaptured) {
+            try emitOpCode(.OP_CLOSE_UPVALUE);
+        } else {
+            try emitOpCode(.OP_POP);
+        }
+        cur.localCount -= 1;
     }
 }
 
@@ -552,6 +560,7 @@ fn addLocal(name: Token) void {
     current.?.localCount += 1;
     local.name = name;
     local.depth = -1;
+    local.isCaptured = false;
 }
 
 fn defineVariable(global: u8) !void {

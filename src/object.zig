@@ -197,11 +197,15 @@ pub const ObjString = struct {
 pub const ObjUpvalue = struct {
     obj: Obj,
     location: *Value,
+    closed: Value,
+    next: ?*ObjUpvalue,
 
     pub fn create(allocator: *GcAllocator, slot: *Value) !*ObjUpvalue {
         const upvalue = try allocator.createUpvalue();
         upvalue.obj.type = Obj.Type.OBJ_UPVALUE;
         upvalue.location = slot;
+        upvalue.closed = Value.nil;
+        upvalue.next = null;
         return upvalue;
     }
 

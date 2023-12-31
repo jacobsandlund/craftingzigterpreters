@@ -42,20 +42,21 @@ pub const InterpretError = error{
 } || std.fs.File.WriteError || std.mem.Allocator.Error;
 
 pub fn init(allocator: std.mem.Allocator) !Self {
-    var gcAllocator = GcAllocator.init(allocator);
-    return Self{
-        .allocator = gcAllocator,
+    return .{
+        .allocator = GcAllocator.init(allocator),
         .frames = undefined,
         .frameCount = 0,
         .openUpvalues = null,
         .stack = undefined,
         .stackTop = undefined,
-        .globals = Table.init(gcAllocator.allocator()),
+        .globals = undefined,
     };
 }
 
 // TODO: what's the Zig way to have this happen in init?
 pub fn setup(self: *Self) !void {
+    self.allocator.vm = self;
+    self.globals = Table.init(self.allocator.allocator());
     self.resetStack();
     try self.defineNative("clock", clockNative);
     try self.defineNative("countArgs", countArgsNative);

@@ -49,12 +49,14 @@ pub const Value = union(Type) {
 
 pub const ValueArray = struct {
     values: ArrayList(Value),
+    appendingValue: Value,
 
     const Self = @This();
 
     pub fn init(allocator: Allocator) Self {
         return Self{
             .values = ArrayList(Value).init(allocator),
+            .appendingValue = Value.nil,
         };
     }
 
@@ -63,6 +65,8 @@ pub const ValueArray = struct {
     }
 
     pub fn write(self: *Self, value: Value) Allocator.Error!void {
+        self.appendingValue = value;
         try self.values.append(value);
+        self.appendingValue = Value.nil;
     }
 };

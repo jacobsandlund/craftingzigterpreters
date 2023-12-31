@@ -8,6 +8,7 @@ const ArrayList = std.ArrayList;
 
 pub const Obj = struct {
     type: Type,
+    isMarked: bool,
     next: ?*Obj = null,
 
     pub const Type = enum {
@@ -48,16 +49,16 @@ pub const Obj = struct {
         }
     }
 
-    pub fn destroyWithAllocator(self: *Obj, allocator: Allocator) void {
+    pub fn destroyWithAllocator(self: *Obj, allocator: *GcAllocator) void {
         switch (self.type) {
             .OBJ_CLOSURE => {
                 const c = self.closure();
-                c.deinitWithAllocator(allocator);
+                c.deinitWithAllocator(allocator.allocator());
                 allocator.destroy(c);
             },
             .OBJ_FUNCTION => {
                 const f = self.function();
-                f.deinitWithAllocator(allocator);
+                f.deinitWithAllocator(allocator.allocator());
                 allocator.destroy(f);
             },
             .OBJ_NATIVE => {
@@ -66,7 +67,8 @@ pub const Obj = struct {
             },
             .OBJ_STRING => {
                 const s = self.string();
-                s.deinitWithAllocator(allocator);
+                s.print(std.io.getStdErr().writer()) catch unreachable;
+                s.deinitWithAllocator(allocator.allocator());
                 allocator.destroy(s);
             },
             .OBJ_UPVALUE => {
@@ -89,7 +91,6 @@ pub const ObjClosure = struct {
         }
 
         const closure = try allocator.createClosure();
-        closure.obj.type = Obj.Type.OBJ_CLOSURE;
         closure.function = function;
         closure.upvalues = upvalues;
         return closure;
@@ -113,7 +114,6 @@ pub const ObjFunction = struct {
 
     pub fn create(allocator: *GcAllocator) !*ObjFunction {
         const function = try allocator.createFunction();
-        function.obj.type = Obj.Type.OBJ_FUNCTION;
         function.arity = 0;
         function.upvalueCount = 0;
         function.name = null;
@@ -142,7 +142,6 @@ pub const ObjNative = struct {
 
     pub fn create(allocator: *GcAllocator, function: *const NativeFn) !*ObjNative {
         const native = try allocator.createNative();
-        native.obj.type = Obj.Type.OBJ_NATIVE;
         native.function = function;
         return native;
     }
@@ -178,7 +177,6 @@ pub const ObjString = struct {
 
     fn create(allocator: *GcAllocator, slice: []const u8, hash: u32) !*ObjString {
         const string = try allocator.createString();
-        string.obj.type = Obj.Type.OBJ_STRING;
         string.string = slice;
         string.hash = hash;
         try allocator.storeString(string);
@@ -202,7 +200,6 @@ pub const ObjUpvalue = struct {
 
     pub fn create(allocator: *GcAllocator, slot: *Value) !*ObjUpvalue {
         const upvalue = try allocator.createUpvalue();
-        upvalue.obj.type = Obj.Type.OBJ_UPVALUE;
         upvalue.location = slot;
         upvalue.closed = Value.nil;
         upvalue.next = null;

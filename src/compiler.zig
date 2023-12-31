@@ -149,7 +149,7 @@ const Compiler = struct {
 };
 
 var parser: Parser = undefined;
-var current: ?*Compiler = null;
+pub var current: ?*Compiler = null;
 var scanner: Scanner = undefined;
 var allocator: *GcAllocator = undefined;
 

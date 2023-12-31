@@ -116,7 +116,7 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
             for (0..function.upvalueCount) |_| {
                 const isLocal = chunk.code.items[i] == 1;
                 const index = chunk.code.items[i + 1];
-                try writer.print("{d:4}      |                     {s} {d}", .{ i, if (isLocal) "local" else "upvalue", index });
+                try writer.print("{d:4}      |                     {s} {d}\n", .{ i, if (isLocal) "local" else "upvalue", index });
                 i += 2;
             }
 

@@ -23,22 +23,39 @@ objects: ?*Obj,
 strings: Table,
 vm: *Vm,
 grayStack: ArrayList(*Obj),
+bytesAllocated: usize,
+nextGC: usize,
+temporaryValue: Value,
 
 const Self = @This();
+
+const GC_HEAP_GROW_FACTOR = 2;
 
 pub fn init(backingAllocator: std.mem.Allocator) Self {
     return Self{
         .backingAllocator = backingAllocator,
         .objects = null,
-        .strings = Table.init(backingAllocator),
+        .strings = undefined,
         .vm = undefined,
         .grayStack = ArrayList(*Obj).init(backingAllocator),
+        .bytesAllocated = 0,
+        .nextGC = 1024 * 1024,
+        .temporaryValue = Value.nil,
     };
+}
+
+pub fn setup(self: *Self, vm: *Vm) void {
+    self.vm = vm;
+    self.strings = Table.init(self.allocator());
 }
 
 fn alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
     const self: *Self = @ptrCast(@alignCast(ctx));
+    self.bytesAllocated += len;
     if (DEBUG_STRESS_GC) {
+        self.collectGarbage();
+    }
+    if (self.bytesAllocated > self.nextGC) {
         self.collectGarbage();
     }
     return self.backingAllocator.rawAlloc(len, ptr_align, ret_addr);
@@ -46,16 +63,19 @@ fn alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
 
 fn resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
     const self: *Self = @ptrCast(@alignCast(ctx));
-    if (new_len > buf.len) {
-        if (DEBUG_STRESS_GC) {
-            self.collectGarbage();
-        }
+    self.bytesAllocated += new_len - buf.len;
+    if (DEBUG_STRESS_GC and new_len > buf.len) {
+        self.collectGarbage();
+    }
+    if (self.bytesAllocated > self.nextGC) {
+        self.collectGarbage();
     }
     return self.backingAllocator.rawResize(buf, buf_align, new_len, ret_addr);
 }
 
 fn free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
     const self: *Self = @ptrCast(@alignCast(ctx));
+    self.bytesAllocated -= buf.len;
     return self.backingAllocator.rawFree(buf, buf_align, ret_addr);
 }
 
@@ -105,6 +125,7 @@ pub fn deinit(self: *Self) void {
 }
 
 fn collectGarbage(self: *Self) void {
+    const before = self.bytesAllocated;
     if (DEBUG_LOG_GC) {
         std.debug.print("-- gc begin\n", .{});
     }
@@ -114,12 +135,17 @@ fn collectGarbage(self: *Self) void {
     tableRemoveWhite(&self.strings);
     self.sweep();
 
+    self.nextGC = self.bytesAllocated * GC_HEAP_GROW_FACTOR;
+
     if (DEBUG_LOG_GC) {
         std.debug.print("-- gc end\n", .{});
+        std.debug.print("   collected {d} bytes (from {d} to {d} next at {d}\n", .{ before - self.bytesAllocated, before, self.bytesAllocated, self.nextGC });
     }
 }
 
 fn markRoots(self: *Self) void {
+    self.markValue(self.temporaryValue);
+
     var slot: [*]Value = @ptrCast(&self.vm.stack);
     while (slot != self.vm.stackTop) : (slot += 1) {
         self.markValue(slot[0]);
@@ -170,7 +196,6 @@ fn markObject(self: *Self, obj: *Obj) void {
 
 fn markArray(self: *Self, array: ValueArray) void {
     for (array.values.items) |value| self.markValue(value);
-    self.markValue(array.appendingValue);
 }
 
 fn markTable(self: *Self, table: *Table) void {
@@ -301,5 +326,7 @@ pub fn findString(self: *Self, slice: []const u8, hash: u32) ?*ObjString {
 }
 
 pub fn storeString(self: *Self, string: *ObjString) !void {
+    self.temporaryValue = Value{ .obj = &string.obj };
     _ = try self.strings.set(string, Value.nil);
+    self.temporaryValue = Value.nil;
 }

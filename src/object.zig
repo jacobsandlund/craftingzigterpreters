@@ -67,7 +67,6 @@ pub const Obj = struct {
             },
             .OBJ_STRING => {
                 const s = self.string();
-                s.print(std.io.getStdErr().writer()) catch unreachable;
                 s.deinitWithAllocator(allocator.allocator());
                 allocator.destroy(s);
             },
@@ -117,7 +116,7 @@ pub const ObjFunction = struct {
         function.arity = 0;
         function.upvalueCount = 0;
         function.name = null;
-        function.chunk = Chunk.init(allocator.allocator());
+        function.chunk = Chunk.init(allocator);
         return function;
     }
 
@@ -184,6 +183,7 @@ pub const ObjString = struct {
     }
 
     pub fn deinitWithAllocator(self: *ObjString, allocator: Allocator) void {
+        @memset(@constCast(self.string), 'a');
         allocator.free(self.string);
     }
 

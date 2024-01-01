@@ -1,5 +1,7 @@
 const std = @import("std");
 const Obj = @import("object.zig").Obj;
+const GcAllocator = @import("GcAllocator.zig");
+
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
@@ -49,14 +51,14 @@ pub const Value = union(Type) {
 
 pub const ValueArray = struct {
     values: ArrayList(Value),
-    appendingValue: Value,
+    allocator: *GcAllocator,
 
     const Self = @This();
 
-    pub fn init(allocator: Allocator) Self {
-        return Self{
-            .values = ArrayList(Value).init(allocator),
-            .appendingValue = Value.nil,
+    pub fn init(allocator: *GcAllocator) Self {
+        return .{
+            .values = ArrayList(Value).init(allocator.allocator()),
+            .allocator = allocator,
         };
     }
 
@@ -65,8 +67,8 @@ pub const ValueArray = struct {
     }
 
     pub fn write(self: *Self, value: Value) Allocator.Error!void {
-        self.appendingValue = value;
+        self.allocator.temporaryValue = value;
         try self.values.append(value);
-        self.appendingValue = Value.nil;
+        self.allocator.temporaryValue = Value.nil;
     }
 };

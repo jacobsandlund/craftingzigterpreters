@@ -55,7 +55,7 @@ pub fn init(allocator: std.mem.Allocator) !Self {
 
 // TODO: what's the Zig way to have this happen in init?
 pub fn setup(self: *Self) !void {
-    self.allocator.vm = self;
+    self.allocator.setup(self);
     self.globals = Table.init(self.allocator.allocator());
     self.resetStack();
     try self.defineNative("clock", clockNative);
@@ -459,13 +459,15 @@ fn closeUpvalues(self: *Self, last: *Value) void {
 }
 
 fn concatenate(self: *Self) !void {
-    const bString = self.pop().obj.string().string;
-    const aString = self.pop().obj.string().string;
+    const bString = self.peek(0).obj.string().string;
+    const aString = self.peek(1).obj.string().string;
 
     var resultSlice = try self.allocator.allocator().alloc(u8, aString.len + bString.len);
     @memcpy(resultSlice[0..aString.len], aString);
     @memcpy(resultSlice[aString.len..], bString);
 
     const result = try ObjString.takeString(&self.allocator, resultSlice);
+    _ = self.pop();
+    _ = self.pop();
     self.push(Value{ .obj = &result.obj });
 }

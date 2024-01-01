@@ -1,6 +1,7 @@
 const std = @import("std");
 const Value = @import("value.zig").Value;
 const ValueArray = @import("value.zig").ValueArray;
+const GcAllocator = @import("GcAllocator.zig");
 
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
@@ -44,10 +45,12 @@ code: ArrayList(u8),
 lines: ArrayList(u32),
 constants: ValueArray,
 
-pub fn init(allocator: Allocator) Self {
-    return Self{
-        .code = ArrayList(u8).init(allocator),
-        .lines = ArrayList(u32).init(allocator),
+pub fn init(allocator: *GcAllocator) Self {
+    const a = allocator.allocator();
+
+    return .{
+        .code = ArrayList(u8).init(a),
+        .lines = ArrayList(u32).init(a),
         .constants = ValueArray.init(allocator),
     };
 }

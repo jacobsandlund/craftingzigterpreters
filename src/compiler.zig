@@ -417,7 +417,9 @@ fn expression() ParseError!void {
 }
 
 fn declaration() ParseError!void {
-    if (match(.TOKEN_FUN)) {
+    if (match(.TOKEN_CLASS)) {
+        try classDeclaration();
+    } else if (match(.TOKEN_FUN)) {
         try funDeclaration();
     } else if (match(.TOKEN_VAR)) {
         try varDeclaration();
@@ -426,6 +428,18 @@ fn declaration() ParseError!void {
     }
 
     if (parser.panicMode) synchronize();
+}
+
+fn classDeclaration() ParseError!void {
+    consume(.TOKEN_IDENTIFIER, "Expect class name.");
+    const nameConstant = try identifierConstant(&parser.previous);
+    declareVariable();
+
+    try emitOpCodeWithByte(.OP_CLASS, nameConstant);
+    try defineVariable(nameConstant);
+
+    consume(.TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+    consume(.TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
 }
 
 fn funDeclaration() ParseError!void {

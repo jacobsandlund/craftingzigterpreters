@@ -10,8 +10,10 @@ const compiler = @import("compiler.zig");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Obj = object.Obj;
+const ObjClass = object.ObjClass;
 const ObjClosure = object.ObjClosure;
 const ObjFunction = object.ObjFunction;
+const ObjInstance = object.ObjInstance;
 const ObjNative = object.ObjNative;
 const ObjString = object.ObjString;
 const ObjUpvalue = object.ObjUpvalue;
@@ -225,6 +227,9 @@ fn blackenObject(self: *Self, obj: *Obj) void {
     }
 
     switch (obj.type) {
+        Obj.Type.OBJ_CLASS => {
+            self.markObject(&obj.class().name.obj);
+        },
         Obj.Type.OBJ_CLOSURE => {
             const closure = obj.closure();
             self.markObject(&closure.function.obj);
@@ -236,6 +241,11 @@ fn blackenObject(self: *Self, obj: *Obj) void {
             const function = obj.function();
             if (function.name) |name| self.markObject(&name.obj);
             self.markArray(function.chunk.constants);
+        },
+        Obj.Type.OBJ_INSTANCE => {
+            const instance = obj.instance();
+            self.markObject(&instance.class.obj);
+            self.markTable(&instance.fields);
         },
         Obj.Type.OBJ_UPVALUE => {
             self.markValue(obj.upvalue().closed);
@@ -291,6 +301,12 @@ fn trackObject(self: *Self, obj: *Obj, objType: Obj.Type) void {
     self.objects = obj;
 }
 
+pub fn createClass(self: *Self) !*ObjClass {
+    const class = try self.create(ObjClass);
+    self.trackObject(&class.obj, Obj.Type.OBJ_CLASS);
+    return class;
+}
+
 pub fn createClosure(self: *Self) !*ObjClosure {
     const closure = try self.create(ObjClosure);
     self.trackObject(&closure.obj, Obj.Type.OBJ_CLOSURE);
@@ -301,6 +317,12 @@ pub fn createFunction(self: *Self) !*ObjFunction {
     const function = try self.create(ObjFunction);
     self.trackObject(&function.obj, Obj.Type.OBJ_FUNCTION);
     return function;
+}
+
+pub fn createInstance(self: *Self) !*ObjInstance {
+    const instance = try self.create(ObjInstance);
+    self.trackObject(&instance.obj, Obj.Type.OBJ_INSTANCE);
+    return instance;
 }
 
 pub fn createNative(self: *Self) !*ObjNative {

@@ -10,8 +10,10 @@ const Table = @import("table.zig");
 
 const OpCode = Chunk.OpCode;
 const Obj = object.Obj;
+const ObjClass = object.ObjClass;
 const ObjClosure = object.ObjClosure;
 const ObjFunction = object.ObjFunction;
+const ObjInstance = object.ObjInstance;
 const ObjNative = object.ObjNative;
 const ObjString = object.ObjString;
 const ObjUpvalue = object.ObjUpvalue;
@@ -360,6 +362,10 @@ fn run(self: *Self) InterpretError!void {
                 self.push(result);
                 frame = &self.frames[self.frameCount - 1];
             },
+            .OP_CLASS => {
+                const class = try ObjClass.create(&self.allocator, readString(frame));
+                self.push(Value{ .obj = &class.obj });
+            },
             _ => {
                 try errWriter.print("Unknown opcode {d:4}\n", .{instruction});
                 return InterpretError.RuntimeError;
@@ -391,6 +397,13 @@ fn readString(frame: *CallFrame) *ObjString {
 fn callValue(self: *Self, callee: Value, argCount: usize) !bool {
     if (callee == Value.obj) {
         switch (callee.obj.type) {
+            .OBJ_CLASS => {
+                const class = callee.obj.class();
+                const instance = try ObjInstance.create(&self.allocator, class);
+                self.stackTop -= argCount + 1;
+                self.push(Value{ .obj = &instance.obj });
+                return true;
+            },
             .OBJ_CLOSURE => return self.call(callee.obj.closure(), argCount),
             .OBJ_NATIVE => {
                 const native = callee.obj.native().function;

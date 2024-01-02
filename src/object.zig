@@ -2,6 +2,7 @@ const std = @import("std");
 const GcAllocator = @import("GcAllocator.zig");
 const Chunk = @import("chunk.zig");
 const Value = @import("value.zig").Value;
+const Table = @import("table.zig");
 
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
@@ -12,12 +13,18 @@ pub const Obj = struct {
     next: ?*Obj = null,
 
     pub const Type = enum {
+        OBJ_CLASS,
         OBJ_CLOSURE,
         OBJ_FUNCTION,
+        OBJ_INSTANCE,
         OBJ_NATIVE,
         OBJ_STRING,
         OBJ_UPVALUE,
     };
+
+    pub fn class(self: *Obj) *ObjClass {
+        return @fieldParentPtr(ObjClass, "obj", self);
+    }
 
     pub fn closure(self: *Obj) *ObjClosure {
         return @fieldParentPtr(ObjClosure, "obj", self);
@@ -25,6 +32,10 @@ pub const Obj = struct {
 
     pub fn function(self: *Obj) *ObjFunction {
         return @fieldParentPtr(ObjFunction, "obj", self);
+    }
+
+    pub fn instance(self: *Obj) *ObjInstance {
+        return @fieldParentPtr(ObjInstance, "obj", self);
     }
 
     pub fn native(self: *Obj) *ObjNative {
@@ -41,8 +52,10 @@ pub const Obj = struct {
 
     pub fn printObject(self: *Obj, writer: std.fs.File.Writer) !void {
         switch (self.type) {
+            .OBJ_CLASS => try self.class().print(writer),
             .OBJ_CLOSURE => try self.closure().print(writer),
             .OBJ_FUNCTION => try self.function().print(writer),
+            .OBJ_INSTANCE => try self.instance().print(writer),
             .OBJ_NATIVE => try self.native().print(writer),
             .OBJ_STRING => try self.string().print(writer),
             .OBJ_UPVALUE => try self.upvalue().print(writer),
@@ -51,6 +64,10 @@ pub const Obj = struct {
 
     pub fn destroyWithAllocator(self: *Obj, allocator: *GcAllocator) void {
         switch (self.type) {
+            .OBJ_CLASS => {
+                const c = self.class();
+                allocator.destroy(c);
+            },
             .OBJ_CLOSURE => {
                 const c = self.closure();
                 c.deinitWithAllocator(allocator.allocator());
@@ -58,8 +75,13 @@ pub const Obj = struct {
             },
             .OBJ_FUNCTION => {
                 const f = self.function();
-                f.deinitWithAllocator(allocator.allocator());
+                f.deinit();
                 allocator.destroy(f);
+            },
+            .OBJ_INSTANCE => {
+                const i = self.instance();
+                i.deinit();
+                allocator.destroy(i);
             },
             .OBJ_NATIVE => {
                 const n = self.native();
@@ -75,6 +97,21 @@ pub const Obj = struct {
                 allocator.destroy(u);
             },
         }
+    }
+};
+
+pub const ObjClass = struct {
+    obj: Obj,
+    name: *ObjString,
+
+    pub fn create(allocator: *GcAllocator, name: *ObjString) !*ObjClass {
+        const class = try allocator.createClass();
+        class.name = name;
+        return class;
+    }
+
+    pub fn print(self: ObjClass, writer: std.fs.File.Writer) !void {
+        try writer.print("{s}", .{self.name.string});
     }
 };
 
@@ -120,7 +157,7 @@ pub const ObjFunction = struct {
         return function;
     }
 
-    pub fn deinitWithAllocator(self: *ObjFunction, _: Allocator) void {
+    pub fn deinit(self: *ObjFunction) void {
         self.chunk.deinit();
     }
 
@@ -130,6 +167,27 @@ pub const ObjFunction = struct {
         } else {
             try writer.print("<script>", .{});
         }
+    }
+};
+
+pub const ObjInstance = struct {
+    obj: Obj,
+    class: *ObjClass,
+    fields: Table,
+
+    pub fn create(allocator: *GcAllocator, class: *ObjClass) !*ObjInstance {
+        const instance = try allocator.createInstance();
+        instance.class = class;
+        instance.fields = Table.init(allocator.allocator());
+        return instance;
+    }
+
+    pub fn print(self: *ObjInstance, writer: std.fs.File.Writer) !void {
+        try writer.print("{s} instance", .{self.class.name.string});
+    }
+
+    pub fn deinit(self: *ObjInstance) void {
+        self.fields.deinit();
     }
 };
 
@@ -183,7 +241,6 @@ pub const ObjString = struct {
     }
 
     pub fn deinitWithAllocator(self: *ObjString, allocator: Allocator) void {
-        @memset(@constCast(self.string), 'a');
         allocator.free(self.string);
     }
 

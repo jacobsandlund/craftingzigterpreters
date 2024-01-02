@@ -128,6 +128,9 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         .OP_RETURN => {
             return try simpleInstruction(writer, "OP_RETURN", offset);
         },
+        .OP_CLASS => {
+            return constantInstruction(writer, "OP_CLASS", chunk, offset);
+        },
         _ => {
             try writer.print("Unknown opcode {d:4}\n", .{instruction});
             return offset + 1;

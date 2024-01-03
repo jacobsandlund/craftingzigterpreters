@@ -165,7 +165,7 @@ const rules = blk: {
     r.set(.TOKEN_LEFT_BRACE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_RIGHT_BRACE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_COMMA, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(.TOKEN_DOT, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_DOT, .{ .prefix = null, .infix = dot, .precedence = Precedence.PREC_CALL });
     r.set(.TOKEN_MINUS, .{ .prefix = unary, .infix = binary, .precedence = Precedence.PREC_TERM });
     r.set(.TOKEN_PLUS, .{ .prefix = null, .infix = binary, .precedence = Precedence.PREC_TERM });
     r.set(.TOKEN_SEMICOLON, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
@@ -432,14 +432,20 @@ fn declaration() ParseError!void {
 
 fn classDeclaration() ParseError!void {
     consume(.TOKEN_IDENTIFIER, "Expect class name.");
+    const className = parser.previous;
     const nameConstant = try identifierConstant(&parser.previous);
     declareVariable();
 
     try emitOpCodeWithByte(.OP_CLASS, nameConstant);
     try defineVariable(nameConstant);
 
+    try namedVariable(className, false);
     consume(.TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+    while (!check(.TOKEN_RIGHT_BRACE) and !check(.TOKEN_EOF)) {
+        try method();
+    }
     consume(.TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
+    try emitOpCode(.OP_POP);
 }
 
 fn funDeclaration() ParseError!void {
@@ -558,6 +564,15 @@ fn function(functionType: FunctionType) ParseError!void {
         try emitByte(if (compiler.upvalues[i].isLocal) 1 else 0);
         try emitByte(compiler.upvalues[i].index);
     }
+}
+
+fn method() ParseError!void {
+    consume(.TOKEN_IDENTIFIER, "Expect method name.");
+    const constant = try identifierConstant(&parser.previous);
+
+    const methodType: FunctionType = .TYPE_FUNCTION;
+    try function(methodType);
+    try emitOpCodeWithByte(.OP_METHOD, constant);
 }
 
 fn identifiersEqual(a: *const Token, b: *const Token) bool {
@@ -746,6 +761,18 @@ fn unary(_: bool) ParseError!void {
         else => {
             unreachable;
         },
+    }
+}
+
+fn dot(canAssign: bool) ParseError!void {
+    consume(.TOKEN_IDENTIFIER, "Expect property name after '.'.");
+    const name = try identifierConstant(&parser.previous);
+
+    if (canAssign and match(.TOKEN_EQUAL)) {
+        try expression();
+        try emitOpCodeWithByte(.OP_SET_PROPERTY, name);
+    } else {
+        try emitOpCodeWithByte(.OP_GET_PROPERTY, name);
     }
 }
 

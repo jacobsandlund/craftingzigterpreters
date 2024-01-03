@@ -212,7 +212,7 @@ fn run(self: *Self) InterpretError!void {
                     self.push(v);
                 } else {
                     try self.runtimeError("Undefined variable '{s}'.", .{name.string});
-                    return InterpretError.RuntimeError;
+                    return error.RuntimeError;
                 }
             },
             .OP_DEFINE_GLOBAL => {
@@ -225,7 +225,7 @@ fn run(self: *Self) InterpretError!void {
                 if (try self.globals.set(name, self.peek(0))) {
                     _ = self.globals.delete(name);
                     try self.runtimeError("Undefined variable '{s}'.", .{name.string});
-                    return InterpretError.RuntimeError;
+                    return error.RuntimeError;
                 }
             },
             .OP_GET_UPVALUE => {
@@ -236,6 +236,36 @@ fn run(self: *Self) InterpretError!void {
                 const slot = readByte(frame);
                 frame.closure.upvalues[slot].?.location.* = self.peek(0);
             },
+            .OP_GET_PROPERTY => {
+                if (!self.peek(0).isObjType(.OBJ_INSTANCE)) {
+                    try self.runtimeError("Only instances have properties.", .{});
+                    return error.RuntimeError;
+                }
+
+                const instance = self.peek(0).obj.instance();
+                const name = readString(frame);
+
+                if (instance.fields.get(name)) |value| {
+                    _ = self.pop();
+                    self.push(value);
+                } else {
+                    try self.runtimeError("Undefined property '{s}'.", .{name.string});
+                    return error.RuntimeError;
+                }
+            },
+            .OP_SET_PROPERTY => {
+                if (!self.peek(1).isObjType(.OBJ_INSTANCE)) {
+                    try self.runtimeError("Only instances have properties.", .{});
+                    return error.RuntimeError;
+                }
+
+                const instance = self.peek(1).obj.instance();
+                try self.peek(0).print(errWriter);
+                _ = try instance.fields.set(readString(frame), self.peek(0));
+                const value = self.pop();
+                _ = self.pop();
+                self.push(value);
+            },
             .OP_EQUAL => {
                 const b = self.pop();
                 const a = self.pop();
@@ -244,7 +274,7 @@ fn run(self: *Self) InterpretError!void {
             .OP_GREATER => {
                 if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
                     try self.runtimeError("Operands must be numbers.", .{});
-                    return InterpretError.RuntimeError;
+                    return error.RuntimeError;
                 }
                 const b = self.pop().number;
                 const a = self.pop().number;
@@ -253,14 +283,14 @@ fn run(self: *Self) InterpretError!void {
             .OP_LESS => {
                 if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
                     try self.runtimeError("Operands must be numbers.", .{});
-                    return InterpretError.RuntimeError;
+                    return error.RuntimeError;
                 }
                 const b = self.pop().number;
                 const a = self.pop().number;
                 self.push(.{ .boolean = a < b });
             },
             .OP_ADD => {
-                if (self.peek(0).isObjType(Obj.Type.OBJ_STRING) and self.peek(1).isObjType(Obj.Type.OBJ_STRING)) {
+                if (self.peek(0).isObjType(.OBJ_STRING) and self.peek(1).isObjType(Obj.Type.OBJ_STRING)) {
                     try self.concatenate();
                 } else if (self.peek(0) == Value.number and self.peek(1) == Value.number) {
                     const b = self.pop().number;
@@ -268,13 +298,13 @@ fn run(self: *Self) InterpretError!void {
                     self.push(.{ .number = a + b });
                 } else {
                     try self.runtimeError("Operands must be two numbers or two strings.", .{});
-                    return InterpretError.RuntimeError;
+                    return error.RuntimeError;
                 }
             },
             .OP_SUBTRACT => {
                 if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
                     try self.runtimeError("Operands must be numbers.", .{});
-                    return InterpretError.RuntimeError;
+                    return error.RuntimeError;
                 }
                 const b = self.pop().number;
                 const a = self.pop().number;
@@ -283,7 +313,7 @@ fn run(self: *Self) InterpretError!void {
             .OP_MULTIPLY => {
                 if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
                     try self.runtimeError("Operands must be numbers.", .{});
-                    return InterpretError.RuntimeError;
+                    return error.RuntimeError;
                 }
                 const b = self.pop().number;
                 const a = self.pop().number;
@@ -292,7 +322,7 @@ fn run(self: *Self) InterpretError!void {
             .OP_DIVIDE => {
                 if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
                     try self.runtimeError("Operands must be numbers.", .{});
-                    return InterpretError.RuntimeError;
+                    return error.RuntimeError;
                 }
                 const b = self.pop().number;
                 const a = self.pop().number;
@@ -304,7 +334,7 @@ fn run(self: *Self) InterpretError!void {
             .OP_NEGATE => {
                 if (self.peek(0) != Value.number) {
                     try self.runtimeError("Operand must be a number.", .{});
-                    return InterpretError.RuntimeError;
+                    return error.RuntimeError;
                 }
                 self.push(.{ .number = -(self.pop().number) });
             },
@@ -327,7 +357,7 @@ fn run(self: *Self) InterpretError!void {
             .OP_CALL => {
                 const argCount = readByte(frame);
                 if (!try self.callValue(self.peek(argCount), argCount)) {
-                    return InterpretError.RuntimeError;
+                    return error.RuntimeError;
                 }
                 frame = &self.frames[self.frameCount - 1];
             },
@@ -366,9 +396,12 @@ fn run(self: *Self) InterpretError!void {
                 const class = try ObjClass.create(&self.allocator, readString(frame));
                 self.push(Value{ .obj = &class.obj });
             },
+            .OP_METHOD => {
+                try self.defineMethod(readString(frame));
+            },
             _ => {
                 try errWriter.print("Unknown opcode {d:4}\n", .{instruction});
-                return InterpretError.RuntimeError;
+                return error.RuntimeError;
             },
         }
     }
@@ -483,4 +516,10 @@ fn concatenate(self: *Self) !void {
     _ = self.pop();
     _ = self.pop();
     self.push(Value{ .obj = &result.obj });
+}
+
+fn defineMethod(self: *Self, name: *ObjString) !void {
+    const method = self.peek(0);
+    const class = self.peek(1).obj.class();
+    _ = try class.methods.set(name, method);
 }

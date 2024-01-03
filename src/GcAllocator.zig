@@ -10,6 +10,7 @@ const compiler = @import("compiler.zig");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Obj = object.Obj;
+const ObjBoundMethod = object.ObjBoundMethod;
 const ObjClass = object.ObjClass;
 const ObjClosure = object.ObjClosure;
 const ObjFunction = object.ObjFunction;
@@ -227,30 +228,37 @@ fn blackenObject(self: *Self, obj: *Obj) void {
     }
 
     switch (obj.type) {
-        Obj.Type.OBJ_CLASS => {
-            self.markObject(&obj.class().name.obj);
+        .OBJ_BOUND_METHOD => {
+            const bound = obj.boundMethod();
+            self.markValue(bound.receiver);
+            self.markObject(&bound.method.obj);
         },
-        Obj.Type.OBJ_CLOSURE => {
+        .OBJ_CLASS => {
+            const class = obj.class();
+            self.markObject(&class.name.obj);
+            self.markTable(&class.methods);
+        },
+        .OBJ_CLOSURE => {
             const closure = obj.closure();
             self.markObject(&closure.function.obj);
             for (closure.upvalues) |upvalue| {
                 if (upvalue) |u| self.markObject(&u.obj);
             }
         },
-        Obj.Type.OBJ_FUNCTION => {
+        .OBJ_FUNCTION => {
             const function = obj.function();
             if (function.name) |name| self.markObject(&name.obj);
             self.markArray(function.chunk.constants);
         },
-        Obj.Type.OBJ_INSTANCE => {
+        .OBJ_INSTANCE => {
             const instance = obj.instance();
             self.markObject(&instance.class.obj);
             self.markTable(&instance.fields);
         },
-        Obj.Type.OBJ_UPVALUE => {
+        .OBJ_UPVALUE => {
             self.markValue(obj.upvalue().closed);
         },
-        Obj.Type.OBJ_NATIVE, Obj.Type.OBJ_STRING => {},
+        .OBJ_NATIVE, .OBJ_STRING => {},
     }
 }
 
@@ -301,45 +309,51 @@ fn trackObject(self: *Self, obj: *Obj, objType: Obj.Type) void {
     self.objects = obj;
 }
 
+pub fn createBoundMethod(self: *Self) !*ObjBoundMethod {
+    const bound = try self.create(ObjBoundMethod);
+    self.trackObject(&bound, .OBJ_BOUND_METHOD);
+    return bound;
+}
+
 pub fn createClass(self: *Self) !*ObjClass {
     const class = try self.create(ObjClass);
-    self.trackObject(&class.obj, Obj.Type.OBJ_CLASS);
+    self.trackObject(&class.obj, .OBJ_CLASS);
     return class;
 }
 
 pub fn createClosure(self: *Self) !*ObjClosure {
     const closure = try self.create(ObjClosure);
-    self.trackObject(&closure.obj, Obj.Type.OBJ_CLOSURE);
+    self.trackObject(&closure.obj, .OBJ_CLOSURE);
     return closure;
 }
 
 pub fn createFunction(self: *Self) !*ObjFunction {
     const function = try self.create(ObjFunction);
-    self.trackObject(&function.obj, Obj.Type.OBJ_FUNCTION);
+    self.trackObject(&function.obj, .OBJ_FUNCTION);
     return function;
 }
 
 pub fn createInstance(self: *Self) !*ObjInstance {
     const instance = try self.create(ObjInstance);
-    self.trackObject(&instance.obj, Obj.Type.OBJ_INSTANCE);
+    self.trackObject(&instance.obj, .OBJ_INSTANCE);
     return instance;
 }
 
 pub fn createNative(self: *Self) !*ObjNative {
     const native = try self.create(ObjNative);
-    self.trackObject(&native.obj, Obj.Type.OBJ_NATIVE);
+    self.trackObject(&native.obj, .OBJ_NATIVE);
     return native;
 }
 
 pub fn createString(self: *Self) !*ObjString {
     const string = try self.create(ObjString);
-    self.trackObject(&string.obj, Obj.Type.OBJ_STRING);
+    self.trackObject(&string.obj, .OBJ_STRING);
     return string;
 }
 
 pub fn createUpvalue(self: *Self) !*ObjUpvalue {
     const upvalue = try self.create(ObjUpvalue);
-    self.trackObject(&upvalue.obj, Obj.Type.OBJ_UPVALUE);
+    self.trackObject(&upvalue.obj, .OBJ_UPVALUE);
     return upvalue;
 }
 

@@ -62,6 +62,12 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         .OP_SET_UPVALUE => {
             return try byteInstruction(writer, "OP_SET_UPVALUE", chunk, offset);
         },
+        .OP_GET_PROPERTY => {
+            return try byteInstruction(writer, "OP_GET_PROPERTY", chunk, offset);
+        },
+        .OP_SET_PROPERTY => {
+            return try byteInstruction(writer, "OP_SET_PROPERTY", chunk, offset);
+        },
         .OP_EQUAL => {
             return try simpleInstruction(writer, "OP_EQUAL", offset);
         },
@@ -130,6 +136,9 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         },
         .OP_CLASS => {
             return constantInstruction(writer, "OP_CLASS", chunk, offset);
+        },
+        .OP_METHOD => {
+            return constantInstruction(writer, "OP_METHOD", chunk, offset);
         },
         _ => {
             try writer.print("Unknown opcode {d:4}\n", .{instruction});

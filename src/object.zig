@@ -13,6 +13,7 @@ pub const Obj = struct {
     next: ?*Obj = null,
 
     pub const Type = enum {
+        OBJ_BOUND_METHOD,
         OBJ_CLASS,
         OBJ_CLOSURE,
         OBJ_FUNCTION,
@@ -21,6 +22,10 @@ pub const Obj = struct {
         OBJ_STRING,
         OBJ_UPVALUE,
     };
+
+    pub fn boundMethod(self: *Obj) *ObjBoundMethod {
+        return @fieldParentPtr(ObjBoundMethod, "obj", self);
+    }
 
     pub fn class(self: *Obj) *ObjClass {
         return @fieldParentPtr(ObjClass, "obj", self);
@@ -52,6 +57,7 @@ pub const Obj = struct {
 
     pub fn printObject(self: *Obj, writer: std.fs.File.Writer) !void {
         switch (self.type) {
+            .OBJ_BOUND_METHOD => try self.boundMethod().print(writer),
             .OBJ_CLASS => try self.class().print(writer),
             .OBJ_CLOSURE => try self.closure().print(writer),
             .OBJ_FUNCTION => try self.function().print(writer),
@@ -64,8 +70,13 @@ pub const Obj = struct {
 
     pub fn destroyWithAllocator(self: *Obj, allocator: *GcAllocator) void {
         switch (self.type) {
+            .OBJ_BOUND_METHOD => {
+                const b = self.boundMethod();
+                allocator.destroy(b);
+            },
             .OBJ_CLASS => {
                 const c = self.class();
+                c.deinit();
                 allocator.destroy(c);
             },
             .OBJ_CLOSURE => {
@@ -100,18 +111,41 @@ pub const Obj = struct {
     }
 };
 
+pub const ObjBoundMethod = struct {
+    obj: Obj,
+    receiver: Value,
+    method: *ObjClosure,
+
+    pub fn create(allocator: *GcAllocator, receiver: Value, method: *ObjClosure) !*ObjBoundMethod {
+        const bound = try allocator.createBoundMethod();
+        bound.receiver = receiver;
+        bound.method = method;
+        return bound;
+    }
+
+    pub fn print(self: ObjBoundMethod, writer: std.fs.File.Writer) !void {
+        try self.method.print(writer);
+    }
+};
+
 pub const ObjClass = struct {
     obj: Obj,
     name: *ObjString,
+    methods: Table,
 
     pub fn create(allocator: *GcAllocator, name: *ObjString) !*ObjClass {
         const class = try allocator.createClass();
         class.name = name;
+        class.methods = Table.init(allocator.allocator());
         return class;
     }
 
     pub fn print(self: ObjClass, writer: std.fs.File.Writer) !void {
         try writer.print("{s}", .{self.name.string});
+    }
+
+    pub fn deinit(self: *ObjClass) void {
+        self.methods.deinit();
     }
 };
 

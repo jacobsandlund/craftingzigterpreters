@@ -270,6 +270,14 @@ fn run(self: *Self) InterpretError!void {
                 _ = self.pop();
                 self.push(value);
             },
+            .OP_GET_SUPER => {
+                const name = readString(frame);
+                const superclass = self.pop().obj.class();
+
+                if (!try self.bindMethod(superclass, name)) {
+                    return error.RuntimeError;
+                }
+            },
             .OP_EQUAL => {
                 const b = self.pop();
                 const a = self.pop();
@@ -373,6 +381,15 @@ fn run(self: *Self) InterpretError!void {
                 }
                 frame = &self.frames[self.frameCount - 1];
             },
+            .OP_SUPER_INVOKE => {
+                const method = readString(frame);
+                const argCount = readByte(frame);
+                const superclass = self.pop().obj.class();
+                if (!try self.invokeFromClass(superclass, method, argCount)) {
+                    return error.RuntimeError;
+                }
+                frame = &self.frames[self.frameCount - 1];
+            },
             .OP_CLOSURE => {
                 const function = readConstant(frame).obj.function();
                 const closure = try ObjClosure.create(&self.allocator, function);
@@ -407,6 +424,17 @@ fn run(self: *Self) InterpretError!void {
             .OP_CLASS => {
                 const class = try ObjClass.create(&self.allocator, readString(frame));
                 self.push(Value{ .obj = &class.obj });
+            },
+            .OP_INHERIT => {
+                const superclass = self.peek(1);
+                if (!superclass.isObjType(.OBJ_CLASS)) {
+                    try self.runtimeError("Superclass must be a class.", .{});
+                    return error.RuntimeError;
+                }
+
+                const subclass = self.peek(0).obj.class();
+                try subclass.methods.addAll(&superclass.obj.class().methods);
+                _ = self.pop(); // Subclass.
             },
             .OP_METHOD => {
                 try self.defineMethod(readString(frame));

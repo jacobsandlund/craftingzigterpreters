@@ -68,6 +68,9 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         .OP_SET_PROPERTY => {
             return try byteInstruction(writer, "OP_SET_PROPERTY", chunk, offset);
         },
+        .OP_GET_SUPER => {
+            return try constantInstruction(writer, "OP_GET_SUPER", chunk, offset);
+        },
         .OP_EQUAL => {
             return try simpleInstruction(writer, "OP_EQUAL", offset);
         },
@@ -113,6 +116,9 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         .OP_INVOKE => {
             return try invokeInstruction(writer, "OP_INVOKE", chunk, offset);
         },
+        .OP_SUPER_INVOKE => {
+            return try invokeInstruction(writer, "OP_SUPER_INVOKE", chunk, offset);
+        },
         .OP_CLOSURE => {
             var i = offset + 1;
             const constant = chunk.code.items[i];
@@ -139,6 +145,9 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         },
         .OP_CLASS => {
             return constantInstruction(writer, "OP_CLASS", chunk, offset);
+        },
+        .OP_INHERIT => {
+            return simpleInstruction(writer, "OP_INHERIT", offset);
         },
         .OP_METHOD => {
             return constantInstruction(writer, "OP_METHOD", chunk, offset);

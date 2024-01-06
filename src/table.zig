@@ -51,10 +51,10 @@ pub fn set(self: *Self, key: *ObjString, value: Value) !bool {
     return isNewKey;
 }
 
-pub fn addAll(self: *Self, from: *Self) void {
+pub fn addAll(self: *Self, from: *Self) !void {
     for (from.entries) |entry| {
         if (entry.key) |key| {
-            self.set(key, entry.value);
+            _ = try self.set(key, entry.value);
         }
     }
 }

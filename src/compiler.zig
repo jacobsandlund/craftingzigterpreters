@@ -156,6 +156,7 @@ const Compiler = struct {
 
 const ClassCompiler = struct {
     enclosing: ?*const ClassCompiler,
+    hasSuperclass: bool,
 };
 
 var parser: Parser = undefined;
@@ -204,7 +205,7 @@ const rules = blk: {
     r.set(.TOKEN_OR, .{ .prefix = null, .infix = or_, .precedence = Precedence.PREC_OR });
     r.set(.TOKEN_PRINT, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_RETURN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(.TOKEN_SUPER, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_SUPER, .{ .prefix = super, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_THIS, .{ .prefix = this, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_TRUE, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_VAR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
@@ -294,6 +295,14 @@ fn match(tokenType: Token.Type) bool {
 
     advance();
     return true;
+}
+
+fn syntheticToken(text: []const u8) Token {
+    return Token{
+        .type = undefined,
+        .slice = text,
+        .line = undefined,
+    };
 }
 
 fn emitByte(byte: u8) ParseError!void {
@@ -454,8 +463,28 @@ fn classDeclaration() ParseError!void {
     try emitOpCodeWithByte(.OP_CLASS, nameConstant);
     try defineVariable(nameConstant);
 
-    const classCompiler = ClassCompiler{ .enclosing = currentClass };
+    var classCompiler = ClassCompiler{
+        .enclosing = currentClass,
+        .hasSuperclass = false,
+    };
     currentClass = &classCompiler;
+
+    if (match(.TOKEN_LESS)) {
+        consume(.TOKEN_IDENTIFIER, "Expect superclass name.");
+        try variable(false);
+
+        if (identifiersEqual(&className, &parser.previous)) {
+            error_("A class can't inherit from itself.");
+        }
+
+        beginScope();
+        addLocal(syntheticToken("super"));
+        try defineVariable(0);
+
+        try namedVariable(className, false);
+        try emitOpCode(.OP_INHERIT);
+        classCompiler.hasSuperclass = true;
+    }
 
     try namedVariable(className, false);
     consume(.TOKEN_LEFT_BRACE, "Expect '{' before class body.");
@@ -464,6 +493,10 @@ fn classDeclaration() ParseError!void {
     }
     consume(.TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
     try emitOpCode(.OP_POP);
+
+    if (classCompiler.hasSuperclass) {
+        try endScope();
+    }
 
     currentClass = classCompiler.enclosing;
 }
@@ -864,6 +897,30 @@ fn or_(_: bool) ParseError!void {
 
     try parsePrecedence(.PREC_OR);
     patchJump(endJump);
+}
+
+fn super(_: bool) ParseError!void {
+    if (currentClass == null) {
+        error_("Can't use 'super' outside of a class.");
+    } else if (!currentClass.?.hasSuperclass) {
+        error_("Can't use 'super' in a class with no superclass.");
+    }
+
+    consume(.TOKEN_DOT, "Expect '.' after 'super'.");
+    consume(.TOKEN_IDENTIFIER, "Expect superclass method name.");
+    const name = try identifierConstant(&parser.previous);
+
+    try namedVariable(syntheticToken("this"), false);
+
+    if (match(.TOKEN_LEFT_PAREN)) {
+        const argCount = try argumentList();
+        try namedVariable(syntheticToken("super"), false);
+        try emitOpCodeWithByte(.OP_SUPER_INVOKE, name);
+        try emitByte(argCount);
+    } else {
+        try namedVariable(syntheticToken("super"), false);
+        try emitOpCodeWithByte(.OP_GET_SUPER, name);
+    }
 }
 
 fn this(_: bool) ParseError!void {

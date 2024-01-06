@@ -110,6 +110,9 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
         .OP_CALL => {
             return try byteInstruction(writer, "OP_CALL", chunk, offset);
         },
+        .OP_INVOKE => {
+            return try invokeInstruction(writer, "OP_INVOKE", chunk, offset);
+        },
         .OP_CLOSURE => {
             var i = offset + 1;
             const constant = chunk.code.items[i];
@@ -169,5 +172,14 @@ fn constantInstruction(writer: Writer, name: []const u8, chunk: *Chunk, offset: 
 fn jumpInstruction(writer: Writer, name: []const u8, sign: isize, chunk: *Chunk, offset: usize) !usize {
     const jump = (@as(u16, chunk.code.items[offset + 1]) << 8) | (chunk.code.items[offset + 2]);
     try writer.print("{s:<16} {d:4} -> {d}\n", .{ name, offset, @as(isize, @intCast(offset)) + 3 + sign * @as(isize, @intCast(jump)) });
+    return offset + 3;
+}
+
+fn invokeInstruction(writer: Writer, name: []const u8, chunk: *Chunk, offset: usize) !usize {
+    const constant = chunk.code.items[offset + 1];
+    const argCount = chunk.code.items[offset + 2];
+    try writer.print("{s:<16} ({d} args) {d:4} '", .{ name, argCount, constant });
+    try chunk.constants.values.items[constant].print(writer);
+    try writer.print("'\n", .{});
     return offset + 3;
 }

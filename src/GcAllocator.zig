@@ -29,6 +29,7 @@ grayStack: ArrayList(*Obj),
 bytesAllocated: usize,
 nextGC: usize,
 temporaryValue: Value,
+ready: bool,
 
 const Self = @This();
 
@@ -44,6 +45,7 @@ pub fn init(backingAllocator: std.mem.Allocator) Self {
         .bytesAllocated = 0,
         .nextGC = 1024 * 1024,
         .temporaryValue = Value.nil,
+        .ready = false,
     };
 }
 
@@ -128,6 +130,10 @@ pub fn deinit(self: *Self) void {
 }
 
 fn collectGarbage(self: *Self) void {
+    if (!self.ready) {
+        return;
+    }
+
     const before = self.bytesAllocated;
     if (DEBUG_LOG_GC) {
         std.debug.print("-- gc begin\n", .{});
@@ -165,6 +171,7 @@ fn markRoots(self: *Self) void {
     }
 
     self.markTable(&self.vm.globals);
+    self.markObject(&self.vm.initString.obj);
     self.markCompilerRoots();
 }
 
@@ -311,7 +318,7 @@ fn trackObject(self: *Self, obj: *Obj, objType: Obj.Type) void {
 
 pub fn createBoundMethod(self: *Self) !*ObjBoundMethod {
     const bound = try self.create(ObjBoundMethod);
-    self.trackObject(&bound, .OBJ_BOUND_METHOD);
+    self.trackObject(&bound.obj, .OBJ_BOUND_METHOD);
     return bound;
 }
 

@@ -57,6 +57,8 @@ const Upvalue = struct {
 
 const FunctionType = enum {
     TYPE_FUNCTION,
+    TYPE_INITIALIZER,
+    TYPE_METHOD,
     TYPE_SCRIPT,
 };
 
@@ -91,7 +93,11 @@ const Compiler = struct {
         self.localCount += 1;
         local.depth = 0;
         local.isCaptured = false;
-        local.name.slice = "";
+        if (self.type != .TYPE_FUNCTION) {
+            local.name.slice = "this";
+        } else {
+            local.name.slice = "";
+        }
     }
 
     fn resolveLocal(self: *Self, name: *const Token) isize {
@@ -148,8 +154,13 @@ const Compiler = struct {
     }
 };
 
+const ClassCompiler = struct {
+    enclosing: ?*const ClassCompiler,
+};
+
 var parser: Parser = undefined;
 pub var current: ?*Compiler = null;
+var currentClass: ?*const ClassCompiler = null;
 var scanner: Scanner = undefined;
 var allocator: *GcAllocator = undefined;
 
@@ -194,7 +205,7 @@ const rules = blk: {
     r.set(.TOKEN_PRINT, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_RETURN, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_SUPER, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
-    r.set(.TOKEN_THIS, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
+    r.set(.TOKEN_THIS, .{ .prefix = this, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_TRUE, .{ .prefix = literal, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_VAR, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
     r.set(.TOKEN_WHILE, .{ .prefix = null, .infix = null, .precedence = Precedence.PREC_NONE });
@@ -304,7 +315,11 @@ fn emitOpCodeWithByte(opCode: OpCode, byte: u8) ParseError!void {
 }
 
 fn emitReturn() ParseError!void {
-    try emitOpCode(.OP_NIL);
+    if (current.?.type == .TYPE_INITIALIZER) {
+        try emitOpCodeWithByte(.OP_GET_LOCAL, 0);
+    } else {
+        try emitOpCode(.OP_NIL);
+    }
     try emitOpCode(.OP_RETURN);
 }
 
@@ -439,6 +454,9 @@ fn classDeclaration() ParseError!void {
     try emitOpCodeWithByte(.OP_CLASS, nameConstant);
     try defineVariable(nameConstant);
 
+    const classCompiler = ClassCompiler{ .enclosing = currentClass };
+    currentClass = &classCompiler;
+
     try namedVariable(className, false);
     consume(.TOKEN_LEFT_BRACE, "Expect '{' before class body.");
     while (!check(.TOKEN_RIGHT_BRACE) and !check(.TOKEN_EOF)) {
@@ -446,6 +464,8 @@ fn classDeclaration() ParseError!void {
     }
     consume(.TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
     try emitOpCode(.OP_POP);
+
+    currentClass = classCompiler.enclosing;
 }
 
 fn funDeclaration() ParseError!void {
@@ -570,7 +590,10 @@ fn method() ParseError!void {
     consume(.TOKEN_IDENTIFIER, "Expect method name.");
     const constant = try identifierConstant(&parser.previous);
 
-    const methodType: FunctionType = .TYPE_FUNCTION;
+    var methodType: FunctionType = .TYPE_METHOD;
+    if (std.mem.eql(u8, parser.previous.slice, "init")) {
+        methodType = .TYPE_INITIALIZER;
+    }
     try function(methodType);
     try emitOpCodeWithByte(.OP_METHOD, constant);
 }
@@ -699,6 +722,9 @@ fn returnStatement() ParseError!void {
     if (match(.TOKEN_SEMICOLON)) {
         try emitReturn();
     } else {
+        if (current.?.type == .TYPE_INITIALIZER) {
+            error_("Can't return a value from an initializer.");
+        }
         try expression();
         consume(.TOKEN_SEMICOLON, "Expect ';' after return value.");
         try emitOpCode(.OP_RETURN);
@@ -771,6 +797,10 @@ fn dot(canAssign: bool) ParseError!void {
     if (canAssign and match(.TOKEN_EQUAL)) {
         try expression();
         try emitOpCodeWithByte(.OP_SET_PROPERTY, name);
+    } else if (match(.TOKEN_LEFT_PAREN)) {
+        const argCount = try argumentList();
+        try emitOpCodeWithByte(.OP_INVOKE, name);
+        try emitByte(argCount);
     } else {
         try emitOpCodeWithByte(.OP_GET_PROPERTY, name);
     }
@@ -834,6 +864,15 @@ fn or_(_: bool) ParseError!void {
 
     try parsePrecedence(.PREC_OR);
     patchJump(endJump);
+}
+
+fn this(_: bool) ParseError!void {
+    if (currentClass == null) {
+        error_("Can't use 'this' outside of a class.");
+        return;
+    }
+
+    try variable(false);
 }
 
 fn literal(_: bool) ParseError!void {

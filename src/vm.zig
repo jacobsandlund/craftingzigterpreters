@@ -10,6 +10,7 @@ const Table = @import("table.zig");
 
 const OpCode = Chunk.OpCode;
 const Obj = object.Obj;
+const ObjBoundMethod = object.ObjBoundMethod;
 const ObjClass = object.ObjClass;
 const ObjClosure = object.ObjClosure;
 const ObjFunction = object.ObjFunction;
@@ -29,6 +30,7 @@ openUpvalues: ?*ObjUpvalue,
 stack: [STACK_MAX]Value,
 stackTop: [*]Value,
 globals: Table,
+initString: *ObjString,
 
 const CallFrame = struct {
     closure: *ObjClosure,
@@ -52,6 +54,7 @@ pub fn init(allocator: std.mem.Allocator) !Self {
         .stack = undefined,
         .stackTop = undefined,
         .globals = undefined,
+        .initString = undefined,
     };
 }
 
@@ -59,6 +62,8 @@ pub fn init(allocator: std.mem.Allocator) !Self {
 pub fn setup(self: *Self) !void {
     self.allocator.setup(self);
     self.globals = Table.init(self.allocator.allocator());
+    self.initString = try ObjString.copyString(&self.allocator, "init");
+    self.allocator.ready = true;
     self.resetStack();
     try self.defineNative("clock", clockNative);
     try self.defineNative("countArgs", countArgsNative);
@@ -246,10 +251,9 @@ fn run(self: *Self) InterpretError!void {
                 const name = readString(frame);
 
                 if (instance.fields.get(name)) |value| {
-                    _ = self.pop();
+                    _ = self.pop(); // Instance.
                     self.push(value);
-                } else {
-                    try self.runtimeError("Undefined property '{s}'.", .{name.string});
+                } else if (!try self.bindMethod(instance.class, name)) {
                     return error.RuntimeError;
                 }
             },
@@ -361,6 +365,14 @@ fn run(self: *Self) InterpretError!void {
                 }
                 frame = &self.frames[self.frameCount - 1];
             },
+            .OP_INVOKE => {
+                const method = readString(frame);
+                const argCount = readByte(frame);
+                if (!try self.invoke(method, argCount)) {
+                    return error.RuntimeError;
+                }
+                frame = &self.frames[self.frameCount - 1];
+            },
             .OP_CLOSURE => {
                 const function = readConstant(frame).obj.function();
                 const closure = try ObjClosure.create(&self.allocator, function);
@@ -430,11 +442,21 @@ fn readString(frame: *CallFrame) *ObjString {
 fn callValue(self: *Self, callee: Value, argCount: usize) !bool {
     if (callee == Value.obj) {
         switch (callee.obj.type) {
+            .OBJ_BOUND_METHOD => {
+                const bound = callee.obj.boundMethod();
+                (self.stackTop - argCount - 1)[0] = bound.receiver;
+                return self.call(bound.method, argCount);
+            },
             .OBJ_CLASS => {
                 const class = callee.obj.class();
                 const instance = try ObjInstance.create(&self.allocator, class);
-                self.stackTop -= argCount + 1;
-                self.push(Value{ .obj = &instance.obj });
+                (self.stackTop - argCount - 1)[0] = Value{ .obj = &instance.obj };
+                if (class.methods.get(self.initString)) |initializer| {
+                    return self.call(initializer.obj.closure(), argCount);
+                } else if (argCount != 0) {
+                    try self.runtimeError("Expected 0 arguments but got {d}.", .{argCount});
+                    return false;
+                }
                 return true;
             },
             .OBJ_CLOSURE => return self.call(callee.obj.closure(), argCount),
@@ -469,6 +491,33 @@ fn call(self: *Self, closure: *ObjClosure, argCount: usize) !bool {
     frame.ip = closure.function.chunk.code.items.ptr;
     frame.slots = self.stackTop - argCount - 1;
     return true;
+}
+
+fn invoke(self: *Self, name: *ObjString, argCount: usize) !bool {
+    const receiver = self.peek(argCount);
+
+    if (!receiver.isObjType(.OBJ_INSTANCE)) {
+        try self.runtimeError("Only instances have methods.", .{});
+        return false;
+    }
+
+    const instance = receiver.obj.instance();
+
+    if (instance.fields.get(name)) |value| {
+        (self.stackTop - argCount - 1)[0] = value;
+        return self.callValue(value, argCount);
+    }
+
+    return self.invokeFromClass(instance.class, name, argCount);
+}
+
+fn invokeFromClass(self: *Self, class: *ObjClass, name: *ObjString, argCount: usize) !bool {
+    if (class.methods.get(name)) |method| {
+        return self.call(method.obj.closure(), argCount);
+    } else {
+        try self.runtimeError("Undefined property '{s}'.", .{name.string});
+        return false;
+    }
 }
 
 fn captureUpvalue(self: *Self, local: *Value) !*ObjUpvalue {
@@ -522,4 +571,17 @@ fn defineMethod(self: *Self, name: *ObjString) !void {
     const method = self.peek(0);
     const class = self.peek(1).obj.class();
     _ = try class.methods.set(name, method);
+    _ = self.pop();
+}
+
+fn bindMethod(self: *Self, class: *ObjClass, name: *ObjString) !bool {
+    if (class.methods.get(name)) |method| {
+        const bound = try ObjBoundMethod.create(&self.allocator, self.peek(0), method.obj.closure());
+        _ = self.pop();
+        self.push(Value{ .obj = &bound.obj });
+        return true;
+    } else {
+        try self.runtimeError("Undefined property '{s}'.", .{name.string});
+        return false;
+    }
 }

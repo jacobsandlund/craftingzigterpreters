@@ -71,8 +71,8 @@ pub fn get(self: *Self, key: *ObjString) ?Value {
 pub fn findString(self: *Self, slice: []const u8, hash: u32) ?*ObjString {
     if (self.count == 0) return null;
 
-    var index: u32 = @intCast(hash % self.entries.len);
-    while (true) : (index = @intCast((index + 1) % self.entries.len)) {
+    var index: u32 = @intCast(hash & (self.entries.len - 1));
+    while (true) : (index = @intCast((index + 1) & (self.entries.len - 1))) {
         const entry: *Entry = &self.entries[index];
         if (entry.key) |key| {
             if (key.hash == hash and std.mem.eql(u8, key.string, slice)) {
@@ -120,10 +120,10 @@ fn adjustCapacity(self: *Self) !void {
 }
 
 fn findEntry(entries: []Entry, key: *ObjString) *Entry {
-    var index: u32 = @intCast(key.hash % entries.len);
+    var index: u32 = @intCast(key.hash & (entries.len - 1));
     var tombstone: ?*Entry = null;
 
-    while (true) : (index = @intCast((index + 1) % entries.len)) {
+    while (true) : (index = @intCast((index + 1) & (entries.len - 1))) {
         const entry = &entries[index];
         if (entry.key) |entryKey| {
             if (entryKey == key) {

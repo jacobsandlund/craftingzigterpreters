@@ -1,11 +1,12 @@
 const std = @import("std");
 const GcAllocator = @import("GcAllocator.zig");
 const Chunk = @import("chunk.zig");
-const Value = @import("value.zig").Value;
+const value = @import("value.zig");
 const Table = @import("table.zig");
 
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const Value = value.Value;
 
 pub const Obj = struct {
     type: Type,
@@ -292,7 +293,7 @@ pub const ObjUpvalue = struct {
     pub fn create(allocator: *GcAllocator, slot: *Value) !*ObjUpvalue {
         const upvalue = try allocator.createUpvalue();
         upvalue.location = slot;
-        upvalue.closed = Value.nil;
+        upvalue.closed = value.nilValue;
         upvalue.next = null;
         return upvalue;
     }

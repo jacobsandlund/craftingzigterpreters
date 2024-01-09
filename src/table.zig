@@ -1,8 +1,9 @@
 const std = @import("std");
-const Value = @import("value.zig").Value;
+const value = @import("value.zig");
 const ObjString = @import("object.zig").ObjString;
 
 const Allocator = std.mem.Allocator;
+const Value = value.Value;
 
 allocator: Allocator,
 count: usize,
@@ -35,19 +36,19 @@ inline fn maxCount(capacity: usize) usize {
     return @intFromFloat(@as(f64, @floatFromInt(capacity)) * TABLE_MAX_LOAD);
 }
 
-pub fn set(self: *Self, key: *ObjString, value: Value) !bool {
+pub fn set(self: *Self, key: *ObjString, val: Value) !bool {
     if (self.count + 1 > maxCount(self.entries.len)) {
         try self.adjustCapacity();
     }
 
     var entry: *Entry = findEntry(self.entries, key);
     const isNewKey = entry.key == null;
-    if (isNewKey and entry.value == Value.nil) {
+    if (isNewKey and value.isNil(entry.value)) {
         self.count += 1;
     }
 
     entry.key = key;
-    entry.value = value;
+    entry.value = val;
     return isNewKey;
 }
 
@@ -81,7 +82,7 @@ pub fn findString(self: *Self, slice: []const u8, hash: u32) ?*ObjString {
             }
         } else {
             // Stop if we find an empty non-tombstone entry.
-            if (entry.value == Value.nil) return null;
+            if (value.isNil(entry.value)) return null;
         }
     }
 }
@@ -93,7 +94,7 @@ pub fn delete(self: *Self, key: *ObjString) bool {
     if (entry.key == null) return false;
 
     entry.key = null;
-    entry.value = Value{ .boolean = true };
+    entry.value = value.booleanValue(true);
     return true;
 }
 
@@ -102,7 +103,7 @@ fn adjustCapacity(self: *Self) !void {
     var entries = try self.allocator.alloc(Entry, capacity);
     for (entries) |*entry| {
         entry.key = null;
-        entry.value = Value.nil;
+        entry.value = value.nilValue;
     }
 
     self.count = 0;
@@ -131,7 +132,7 @@ fn findEntry(entries: []Entry, key: *ObjString) *Entry {
                 return entry;
             }
         } else {
-            if (entry.value == Value.nil) {
+            if (value.isNil(entry.value)) {
                 // Empty entry.
                 return if (tombstone) |t| t else entry;
             } else {

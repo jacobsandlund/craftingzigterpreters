@@ -1,6 +1,6 @@
 const std = @import("std");
 const Chunk = @import("chunk.zig");
-const Value = @import("value.zig").Value;
+const value = @import("value.zig");
 const DEBUG_PRINT_CODE = @import("common.zig").DEBUG_PRINT_CODE;
 const disassembleChunk = @import("debug.zig").disassembleChunk;
 const ObjString = @import("object.zig").ObjString;
@@ -12,6 +12,7 @@ const Scanner = @import("scanner.zig");
 const Token = Scanner.Token;
 const OpCode = Chunk.OpCode;
 const panic = std.debug.panic;
+const Value = value.Value;
 
 const Parser = struct {
     current: Token,
@@ -332,8 +333,8 @@ fn emitReturn() ParseError!void {
     try emitOpCode(.OP_RETURN);
 }
 
-fn emitConstant(value: Value) ParseError!void {
-    try emitOpCodeWithByte(.OP_CONSTANT, makeConstant(value));
+fn emitConstant(val: Value) ParseError!void {
+    try emitOpCodeWithByte(.OP_CONSTANT, makeConstant(val));
 }
 
 fn emitJump(opCode: OpCode) ParseError!usize {
@@ -366,8 +367,8 @@ fn patchJump(offset: usize) void {
     currentChunk().code.items[offset + 1] = @truncate(jump);
 }
 
-fn makeConstant(value: Value) u8 {
-    const constant = currentChunk().addConstant(value) catch {
+fn makeConstant(val: Value) u8 {
+    const constant = currentChunk().addConstant(val) catch {
         error_("Error writing constant: Out of memory");
         return 0;
     };
@@ -566,7 +567,7 @@ fn parseVariable(errorMessage: []const u8) !u8 {
 
 fn identifierConstant(name: *const Token) !u8 {
     const stringObj = try ObjString.copyString(allocator, name.slice);
-    return makeConstant(Value{ .obj = &stringObj.obj });
+    return makeConstant(value.objValue(&stringObj.obj));
 }
 
 fn declareVariable() void {
@@ -611,7 +612,7 @@ fn function(functionType: FunctionType) ParseError!void {
     try block();
 
     const function_ = try endCompiler();
-    try emitOpCodeWithByte(.OP_CLOSURE, makeConstant(Value{ .obj = &function_.obj }));
+    try emitOpCodeWithByte(.OP_CLOSURE, makeConstant(value.objValue(&function_.obj)));
 
     for (0..function_.upvalueCount) |i| {
         try emitByte(if (compiler.upvalues[i].isLocal) 1 else 0);
@@ -950,16 +951,16 @@ fn literal(_: bool) ParseError!void {
 }
 
 fn number(_: bool) ParseError!void {
-    const value: f64 = std.fmt.parseFloat(f64, parser.previous.slice) catch {
+    const val: f64 = std.fmt.parseFloat(f64, parser.previous.slice) catch {
         error_("Could not parse float.");
         return;
     };
-    try emitConstant(Value{ .number = value });
+    try emitConstant(value.numberValue(val));
 }
 
 fn string(_: bool) ParseError!void {
     const stringObj = try ObjString.copyString(allocator, parser.previous.slice[1 .. parser.previous.slice.len - 1]);
-    try emitConstant(Value{ .obj = &stringObj.obj });
+    try emitConstant(value.objValue(&stringObj.obj));
 }
 
 fn variable(canAssign: bool) ParseError!void {

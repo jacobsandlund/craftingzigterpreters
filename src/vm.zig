@@ -1,6 +1,6 @@
 const std = @import("std");
 const Chunk = @import("chunk.zig");
-const Value = @import("value.zig").Value;
+const value = @import("value.zig");
 const DEBUG_TRACE_EXECUTION = @import("common.zig").DEBUG_TRACE_EXECUTION;
 const disassembleInstruction = @import("debug.zig").disassembleInstruction;
 const compile = @import("compiler.zig").compile;
@@ -19,6 +19,7 @@ const ObjNative = object.ObjNative;
 const ObjString = object.ObjString;
 const ObjUpvalue = object.ObjUpvalue;
 const NativeFn = object.NativeFn;
+const Value = value.Value;
 
 const FRAMES_MAX = 64;
 const STACK_MAX = FRAMES_MAX * (std.math.maxInt(u8) + 1);
@@ -85,11 +86,11 @@ var startNanoTimestamp: i128 = undefined;
 fn clockNative(_: []Value) Value {
     const now = std.time.nanoTimestamp();
     const delta = now - startNanoTimestamp;
-    return .{ .number = @as(f64, @floatFromInt(delta)) / nanosecondsPerSecond };
+    return value.numberValue(@as(f64, @floatFromInt(delta)) / nanosecondsPerSecond);
 }
 
 fn countArgsNative(args: []Value) Value {
-    return .{ .number = @floatFromInt(args.len) };
+    return value.numberValue(@floatFromInt(args.len));
 }
 
 fn resetStack(self: *Self) void {
@@ -120,8 +121,8 @@ fn runtimeError(self: *Self, comptime fmt: []const u8, args: anytype) !void {
     self.resetStack();
 }
 
-fn push(self: *Self, value: Value) void {
-    self.stackTop[0] = value;
+fn push(self: *Self, val: Value) void {
+    self.stackTop[0] = val;
     self.stackTop += 1;
 }
 
@@ -135,15 +136,15 @@ fn peek(self: Self, distance: usize) Value {
 }
 
 fn defineNative(self: *Self, name: []const u8, function: *const NativeFn) !void {
-    self.push(Value{ .obj = &(try ObjString.copyString(&self.allocator, name)).obj });
-    self.push(Value{ .obj = &(try ObjNative.create(&self.allocator, function)).obj });
-    _ = try self.globals.set(self.stack[0].obj.string(), self.stack[1]);
+    self.push(value.objValue(&(try ObjString.copyString(&self.allocator, name)).obj));
+    self.push(value.objValue(&(try ObjNative.create(&self.allocator, function)).obj));
+    _ = try self.globals.set(value.asObj(self.stack[0]).string(), self.stack[1]);
     _ = self.pop();
     _ = self.pop();
 }
 
-fn isFalsey(value: Value) bool {
-    return value == Value.nil or (value == Value.boolean and !value.boolean);
+fn isFalsey(val: Value) bool {
+    return value.isNil(val) or (value.isBoolean(val) and !value.asBoolean(val));
 }
 
 pub fn interpret(self: *Self, source: []const u8) InterpretError!void {
@@ -158,10 +159,10 @@ pub fn interpret(self: *Self, source: []const u8) InterpretError!void {
 
     if (function) |f| {
         self.reset();
-        self.push(Value{ .obj = &f.obj });
+        self.push(value.objValue(&f.obj));
         const closure = try ObjClosure.create(&self.allocator, f);
         _ = self.pop();
-        self.push(Value{ .obj = &closure.obj });
+        self.push(value.objValue(&closure.obj));
         _ = try self.call(closure, 0);
 
         return self.run();
@@ -183,7 +184,7 @@ fn run(self: *Self) InterpretError!void {
             var slot: [*]Value = @ptrCast(&self.stack);
             while (slot != self.stackTop) {
                 try errWriter.print("[ ", .{});
-                try slot[0].print(errWriter);
+                try value.print(slot[0], errWriter);
                 try errWriter.print(" ]", .{});
                 slot += 1;
             }
@@ -198,9 +199,9 @@ fn run(self: *Self) InterpretError!void {
                 const constant = readConstant(frame);
                 self.push(constant);
             },
-            .OP_NIL => self.push(Value.nil),
-            .OP_TRUE => self.push(Value{ .boolean = true }),
-            .OP_FALSE => self.push(Value{ .boolean = false }),
+            .OP_NIL => self.push(value.nilValue),
+            .OP_TRUE => self.push(value.booleanValue(true)),
+            .OP_FALSE => self.push(value.booleanValue(false)),
             .OP_POP => _ = self.pop(),
             .OP_GET_LOCAL => {
                 const slot = readByte(frame);
@@ -212,8 +213,8 @@ fn run(self: *Self) InterpretError!void {
             },
             .OP_GET_GLOBAL => {
                 const name: *ObjString = readString(frame);
-                const value = self.globals.get(name);
-                if (value) |v| {
+                const val = self.globals.get(name);
+                if (val) |v| {
                     self.push(v);
                 } else {
                     try self.runtimeError("Undefined variable '{s}'.", .{name.string});
@@ -242,37 +243,37 @@ fn run(self: *Self) InterpretError!void {
                 frame.closure.upvalues[slot].?.location.* = self.peek(0);
             },
             .OP_GET_PROPERTY => {
-                if (!self.peek(0).isObjType(.OBJ_INSTANCE)) {
+                if (!value.isObjType(self.peek(0), .OBJ_INSTANCE)) {
                     try self.runtimeError("Only instances have properties.", .{});
                     return error.RuntimeError;
                 }
 
-                const instance = self.peek(0).obj.instance();
+                const instance = value.asObj(self.peek(0)).instance();
                 const name = readString(frame);
 
-                if (instance.fields.get(name)) |value| {
+                if (instance.fields.get(name)) |val| {
                     _ = self.pop(); // Instance.
-                    self.push(value);
+                    self.push(val);
                 } else if (!try self.bindMethod(instance.class, name)) {
                     return error.RuntimeError;
                 }
             },
             .OP_SET_PROPERTY => {
-                if (!self.peek(1).isObjType(.OBJ_INSTANCE)) {
+                if (!value.isObjType(self.peek(1), .OBJ_INSTANCE)) {
                     try self.runtimeError("Only instances have properties.", .{});
                     return error.RuntimeError;
                 }
 
-                const instance = self.peek(1).obj.instance();
-                try self.peek(0).print(errWriter);
+                const instance = value.asObj(self.peek(1)).instance();
+                try value.print(self.peek(0), errWriter);
                 _ = try instance.fields.set(readString(frame), self.peek(0));
-                const value = self.pop();
+                const val = self.pop();
                 _ = self.pop();
-                self.push(value);
+                self.push(val);
             },
             .OP_GET_SUPER => {
                 const name = readString(frame);
-                const superclass = self.pop().obj.class();
+                const superclass = value.asObj(self.pop()).class();
 
                 if (!try self.bindMethod(superclass, name)) {
                     return error.RuntimeError;
@@ -281,77 +282,77 @@ fn run(self: *Self) InterpretError!void {
             .OP_EQUAL => {
                 const b = self.pop();
                 const a = self.pop();
-                self.push(.{ .boolean = Value.equal(a, b) });
+                self.push(value.booleanValue(value.equal(a, b)));
             },
             .OP_GREATER => {
-                if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
+                if (!value.isNumber(self.peek(0)) or !value.isNumber(self.peek(1))) {
                     try self.runtimeError("Operands must be numbers.", .{});
                     return error.RuntimeError;
                 }
-                const b = self.pop().number;
-                const a = self.pop().number;
-                self.push(.{ .boolean = a > b });
+                const b = value.asNumber(self.pop());
+                const a = value.asNumber(self.pop());
+                self.push(value.booleanValue(a > b));
             },
             .OP_LESS => {
-                if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
+                if (!value.isNumber(self.peek(0)) or !value.isNumber(self.peek(1))) {
                     try self.runtimeError("Operands must be numbers.", .{});
                     return error.RuntimeError;
                 }
-                const b = self.pop().number;
-                const a = self.pop().number;
-                self.push(.{ .boolean = a < b });
+                const b = value.asNumber(self.pop());
+                const a = value.asNumber(self.pop());
+                self.push(value.booleanValue(a < b));
             },
             .OP_ADD => {
-                if (self.peek(0).isObjType(.OBJ_STRING) and self.peek(1).isObjType(Obj.Type.OBJ_STRING)) {
+                if (value.isObjType(self.peek(0), .OBJ_STRING) and value.isObjType(self.peek(1), .OBJ_STRING)) {
                     try self.concatenate();
-                } else if (self.peek(0) == Value.number and self.peek(1) == Value.number) {
-                    const b = self.pop().number;
-                    const a = self.pop().number;
-                    self.push(.{ .number = a + b });
+                } else if (value.isNumber(self.peek(0)) and value.isNumber(self.peek(1))) {
+                    const b = value.asNumber(self.pop());
+                    const a = value.asNumber(self.pop());
+                    self.push(value.numberValue(a + b));
                 } else {
                     try self.runtimeError("Operands must be two numbers or two strings.", .{});
                     return error.RuntimeError;
                 }
             },
             .OP_SUBTRACT => {
-                if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
+                if (!value.isNumber(self.peek(0)) or !value.isNumber(self.peek(1))) {
                     try self.runtimeError("Operands must be numbers.", .{});
                     return error.RuntimeError;
                 }
-                const b = self.pop().number;
-                const a = self.pop().number;
-                self.push(.{ .number = a - b });
+                const b = value.asNumber(self.pop());
+                const a = value.asNumber(self.pop());
+                self.push(value.numberValue(a - b));
             },
             .OP_MULTIPLY => {
-                if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
+                if (!value.isNumber(self.peek(0)) or !value.isNumber(self.peek(1))) {
                     try self.runtimeError("Operands must be numbers.", .{});
                     return error.RuntimeError;
                 }
-                const b = self.pop().number;
-                const a = self.pop().number;
-                self.push(.{ .number = a * b });
+                const b = value.asNumber(self.pop());
+                const a = value.asNumber(self.pop());
+                self.push(value.numberValue(a * b));
             },
             .OP_DIVIDE => {
-                if (self.peek(0) != Value.number or self.peek(1) != Value.number) {
+                if (!value.isNumber(self.peek(0)) or !value.isNumber(self.peek(1))) {
                     try self.runtimeError("Operands must be numbers.", .{});
                     return error.RuntimeError;
                 }
-                const b = self.pop().number;
-                const a = self.pop().number;
-                self.push(.{ .number = a / b });
+                const b = value.asNumber(self.pop());
+                const a = value.asNumber(self.pop());
+                self.push(value.numberValue(a / b));
             },
             .OP_NOT => {
-                self.push(.{ .boolean = isFalsey(self.pop()) });
+                self.push(value.booleanValue(isFalsey(self.pop())));
             },
             .OP_NEGATE => {
-                if (self.peek(0) != Value.number) {
+                if (!value.isNumber(self.peek(0))) {
                     try self.runtimeError("Operand must be a number.", .{});
                     return error.RuntimeError;
                 }
-                self.push(.{ .number = -(self.pop().number) });
+                self.push(value.numberValue(-(value.asNumber(self.pop()))));
             },
             .OP_PRINT => {
-                try self.pop().print(writer);
+                try value.print(self.pop(), writer);
                 try writer.print("\n", .{});
             },
             .OP_JUMP => {
@@ -384,16 +385,16 @@ fn run(self: *Self) InterpretError!void {
             .OP_SUPER_INVOKE => {
                 const method = readString(frame);
                 const argCount = readByte(frame);
-                const superclass = self.pop().obj.class();
+                const superclass = value.asObj(self.pop()).class();
                 if (!try self.invokeFromClass(superclass, method, argCount)) {
                     return error.RuntimeError;
                 }
                 frame = &self.frames[self.frameCount - 1];
             },
             .OP_CLOSURE => {
-                const function = readConstant(frame).obj.function();
+                const function = value.asObj(readConstant(frame)).function();
                 const closure = try ObjClosure.create(&self.allocator, function);
-                self.push(Value{ .obj = &closure.obj });
+                self.push(value.objValue(&closure.obj));
                 for (closure.upvalues) |*upvalue| {
                     const isLocal = readByte(frame) == 1;
                     const index = readByte(frame);
@@ -423,17 +424,17 @@ fn run(self: *Self) InterpretError!void {
             },
             .OP_CLASS => {
                 const class = try ObjClass.create(&self.allocator, readString(frame));
-                self.push(Value{ .obj = &class.obj });
+                self.push(value.objValue(&class.obj));
             },
             .OP_INHERIT => {
                 const superclass = self.peek(1);
-                if (!superclass.isObjType(.OBJ_CLASS)) {
+                if (!value.isObjType(superclass, .OBJ_CLASS)) {
                     try self.runtimeError("Superclass must be a class.", .{});
                     return error.RuntimeError;
                 }
 
-                const subclass = self.peek(0).obj.class();
-                try subclass.methods.addAll(&superclass.obj.class().methods);
+                const subclass = value.asObj(self.peek(0)).class();
+                try subclass.methods.addAll(&value.asObj(superclass).class().methods);
                 _ = self.pop(); // Subclass.
             },
             .OP_METHOD => {
@@ -464,32 +465,34 @@ fn readConstant(frame: *CallFrame) Value {
 }
 
 fn readString(frame: *CallFrame) *ObjString {
-    return readConstant(frame).obj.string();
+    return value.asObj(readConstant(frame)).string();
 }
 
 fn callValue(self: *Self, callee: Value, argCount: usize) !bool {
-    if (callee == Value.obj) {
-        switch (callee.obj.type) {
+    if (value.isObj(callee)) {
+        const obj = value.asObj(callee);
+
+        switch (obj.type) {
             .OBJ_BOUND_METHOD => {
-                const bound = callee.obj.boundMethod();
+                const bound = obj.boundMethod();
                 (self.stackTop - argCount - 1)[0] = bound.receiver;
                 return self.call(bound.method, argCount);
             },
             .OBJ_CLASS => {
-                const class = callee.obj.class();
+                const class = obj.class();
                 const instance = try ObjInstance.create(&self.allocator, class);
-                (self.stackTop - argCount - 1)[0] = Value{ .obj = &instance.obj };
+                (self.stackTop - argCount - 1)[0] = value.objValue(&instance.obj);
                 if (class.methods.get(self.initString)) |initializer| {
-                    return self.call(initializer.obj.closure(), argCount);
+                    return self.call(value.asObj(initializer).closure(), argCount);
                 } else if (argCount != 0) {
                     try self.runtimeError("Expected 0 arguments but got {d}.", .{argCount});
                     return false;
                 }
                 return true;
             },
-            .OBJ_CLOSURE => return self.call(callee.obj.closure(), argCount),
+            .OBJ_CLOSURE => return self.call(obj.closure(), argCount),
             .OBJ_NATIVE => {
-                const native = callee.obj.native().function;
+                const native = obj.native().function;
                 const result = native((self.stackTop - argCount)[0..argCount]);
                 self.stackTop -= argCount + 1;
                 self.push(result);
@@ -524,16 +527,16 @@ fn call(self: *Self, closure: *ObjClosure, argCount: usize) !bool {
 fn invoke(self: *Self, name: *ObjString, argCount: usize) !bool {
     const receiver = self.peek(argCount);
 
-    if (!receiver.isObjType(.OBJ_INSTANCE)) {
+    if (!value.isObjType(receiver, .OBJ_INSTANCE)) {
         try self.runtimeError("Only instances have methods.", .{});
         return false;
     }
 
-    const instance = receiver.obj.instance();
+    const instance = value.asObj(receiver).instance();
 
-    if (instance.fields.get(name)) |value| {
-        (self.stackTop - argCount - 1)[0] = value;
-        return self.callValue(value, argCount);
+    if (instance.fields.get(name)) |val| {
+        (self.stackTop - argCount - 1)[0] = val;
+        return self.callValue(val, argCount);
     }
 
     return self.invokeFromClass(instance.class, name, argCount);
@@ -541,7 +544,7 @@ fn invoke(self: *Self, name: *ObjString, argCount: usize) !bool {
 
 fn invokeFromClass(self: *Self, class: *ObjClass, name: *ObjString, argCount: usize) !bool {
     if (class.methods.get(name)) |method| {
-        return self.call(method.obj.closure(), argCount);
+        return self.call(value.asObj(method).closure(), argCount);
     } else {
         try self.runtimeError("Undefined property '{s}'.", .{name.string});
         return false;
@@ -582,8 +585,8 @@ fn closeUpvalues(self: *Self, last: *Value) void {
 }
 
 fn concatenate(self: *Self) !void {
-    const bString = self.peek(0).obj.string().string;
-    const aString = self.peek(1).obj.string().string;
+    const bString = value.asObj(self.peek(0)).string().string;
+    const aString = value.asObj(self.peek(1)).string().string;
 
     var resultSlice = try self.allocator.allocator().alloc(u8, aString.len + bString.len);
     @memcpy(resultSlice[0..aString.len], aString);
@@ -592,21 +595,21 @@ fn concatenate(self: *Self) !void {
     const result = try ObjString.takeString(&self.allocator, resultSlice);
     _ = self.pop();
     _ = self.pop();
-    self.push(Value{ .obj = &result.obj });
+    self.push(value.objValue(&result.obj));
 }
 
 fn defineMethod(self: *Self, name: *ObjString) !void {
     const method = self.peek(0);
-    const class = self.peek(1).obj.class();
+    const class = value.asObj(self.peek(1)).class();
     _ = try class.methods.set(name, method);
     _ = self.pop();
 }
 
 fn bindMethod(self: *Self, class: *ObjClass, name: *ObjString) !bool {
     if (class.methods.get(name)) |method| {
-        const bound = try ObjBoundMethod.create(&self.allocator, self.peek(0), method.obj.closure());
+        const bound = try ObjBoundMethod.create(&self.allocator, self.peek(0), value.asObj(method).closure());
         _ = self.pop();
-        self.push(Value{ .obj = &bound.obj });
+        self.push(value.objValue(&bound.obj));
         return true;
     } else {
         try self.runtimeError("Undefined property '{s}'.", .{name.string});

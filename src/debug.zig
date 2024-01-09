@@ -1,5 +1,6 @@
 const std = @import("std");
 const Chunk = @import("chunk.zig");
+const value = @import("value.zig");
 
 const Writer = std.fs.File.Writer;
 const OpCode = Chunk.OpCode;
@@ -124,7 +125,7 @@ pub fn disassembleInstruction(writer: Writer, chunk: *Chunk, offset: usize) !usi
             const constant = chunk.code.items[i];
             i += 1;
             try writer.print("{s:<16} {d:4} ", .{ "OP_CLOSURE", constant });
-            const function = chunk.constants.values.items[constant].obj.function();
+            const function = value.asObj(chunk.constants.values.items[constant]).function();
             try function.print(writer);
             try writer.print("\n", .{});
 
@@ -173,7 +174,7 @@ fn byteInstruction(writer: Writer, name: []const u8, chunk: *Chunk, offset: usiz
 fn constantInstruction(writer: Writer, name: []const u8, chunk: *Chunk, offset: usize) !usize {
     const constant = chunk.code.items[offset + 1];
     try writer.print("{s:<16} {d:4} '", .{ name, constant });
-    try chunk.constants.values.items[constant].print(writer);
+    try value.print(chunk.constants.values.items[constant], writer);
     try writer.print("'\n", .{});
     return offset + 2;
 }
@@ -188,7 +189,7 @@ fn invokeInstruction(writer: Writer, name: []const u8, chunk: *Chunk, offset: us
     const constant = chunk.code.items[offset + 1];
     const argCount = chunk.code.items[offset + 2];
     try writer.print("{s:<16} ({d} args) {d:4} '", .{ name, argCount, constant });
-    try chunk.constants.values.items[constant].print(writer);
+    try value.print(chunk.constants.values.items[constant], writer);
     try writer.print("'\n", .{});
     return offset + 3;
 }

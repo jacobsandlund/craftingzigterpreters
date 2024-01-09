@@ -1,8 +1,7 @@
 const std = @import("std");
 const object = @import("object.zig");
 const Table = @import("table.zig");
-const Value = @import("value.zig").Value;
-const ValueArray = @import("value.zig").ValueArray;
+const value = @import("value.zig");
 const common = @import("common.zig");
 const Vm = @import("vm.zig");
 const compiler = @import("compiler.zig");
@@ -18,6 +17,8 @@ const ObjInstance = object.ObjInstance;
 const ObjNative = object.ObjNative;
 const ObjString = object.ObjString;
 const ObjUpvalue = object.ObjUpvalue;
+const Value = value.Value;
+const ValueArray = value.ValueArray;
 const DEBUG_STRESS_GC = common.DEBUG_STRESS_GC;
 const DEBUG_LOG_GC = common.DEBUG_LOG_GC;
 
@@ -44,7 +45,7 @@ pub fn init(backingAllocator: std.mem.Allocator) Self {
         .grayStack = ArrayList(*Obj).init(backingAllocator),
         .bytesAllocated = 0,
         .nextGC = 1024 * 1024,
-        .temporaryValue = Value.nil,
+        .temporaryValue = value.nilValue,
         .ready = false,
     };
 }
@@ -148,7 +149,7 @@ fn collectGarbage(self: *Self) void {
 
     if (DEBUG_LOG_GC) {
         std.debug.print("-- gc end\n", .{});
-        std.debug.print("   collected {d} bytes (from {d} to {d} next at {d}\n", .{ before - self.bytesAllocated, before, self.bytesAllocated, self.nextGC });
+        std.debug.print("   collected {d} bytes (from {d} to {d}) next at {d}\n", .{ before - self.bytesAllocated, before, self.bytesAllocated, self.nextGC });
     }
 }
 
@@ -183,8 +184,8 @@ fn markCompilerRoots(self: *Self) void {
     }
 }
 
-fn markValue(self: *Self, value: Value) void {
-    if (value == Value.obj) self.markObject(value.obj);
+fn markValue(self: *Self, val: Value) void {
+    if (value.isObj(val)) self.markObject(value.asObj(val));
 }
 
 fn markObject(self: *Self, obj: *Obj) void {
@@ -205,7 +206,7 @@ fn markObject(self: *Self, obj: *Obj) void {
 }
 
 fn markArray(self: *Self, array: ValueArray) void {
-    for (array.values.items) |value| self.markValue(value);
+    for (array.values.items) |val| self.markValue(val);
 }
 
 fn markTable(self: *Self, table: *Table) void {
@@ -369,7 +370,7 @@ pub fn findString(self: *Self, slice: []const u8, hash: u32) ?*ObjString {
 }
 
 pub fn storeString(self: *Self, string: *ObjString) !void {
-    self.temporaryValue = Value{ .obj = &string.obj };
-    _ = try self.strings.set(string, Value.nil);
-    self.temporaryValue = Value.nil;
+    self.temporaryValue = value.objValue(&string.obj);
+    _ = try self.strings.set(string, value.nilValue);
+    self.temporaryValue = value.nilValue;
 }

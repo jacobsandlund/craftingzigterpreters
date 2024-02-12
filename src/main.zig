@@ -85,7 +85,7 @@ fn nextLine(reader: std.io.AnyReader, buffer: []u8) !?[]const u8 {
         else => |e| return e,
     };
 
-    var line = fbs.getWritten();
+    const line = fbs.getWritten();
 
     // trim annoying windows-only carriage return character
     if (@import("builtin").os.tag == .windows) {

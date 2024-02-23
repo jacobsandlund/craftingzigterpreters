@@ -100,7 +100,7 @@ pub fn delete(self: *Self, key: *ObjString) bool {
 
 fn adjustCapacity(self: *Self) !void {
     const capacity = if (self.entries.len < 8) 8 else self.entries.len * 2;
-    var entries = try self.allocator.alloc(Entry, capacity);
+    const entries = try self.allocator.alloc(Entry, capacity);
     for (entries) |*entry| {
         entry.key = null;
         entry.value = value.nilValue;
